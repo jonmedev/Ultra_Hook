@@ -117,6 +117,10 @@ ZIP plus SHA-256 checksum. Review findings before publishing; pattern scans cann
 prove the absence of every possible private value. Use a deliberate public GitHub
 noreply identity for release commits, never a private email address.
 
+For an extracted ZIP without Git metadata, run `python -B scripts/audit_release.py`
+without the Git options. Git audit modes require the repository root and never scan
+an enclosing repository implicitly.
+
 CI runs the portable checks on Windows and Linux. Tag releases run those checks
 before building and publishing the archive. See [release procedure](docs/RELEASING.md).
 UI behavior must be checked separately through AgentController; headless CI does not

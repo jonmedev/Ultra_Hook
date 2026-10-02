@@ -164,6 +164,7 @@ class Auditor:
         self.data_checks(self.git(root, ['cat-file', 'blob', oid]), name, origin)
 
     def staged(self, root):
+        self.require_git_root(root)
         entries = self.git(root, ['ls-files', '--stage', '-z']).split(b'\x00')
         for entry in entries:
             if not entry:
@@ -179,6 +180,7 @@ class Auditor:
             self.git_blob(root, raw_oid, name, 'git-index', mode)
 
     def history(self, root):
+        self.require_git_root(root)
         commits = self.git(root, ['rev-list', '--all']).splitlines()
         if len(commits) > 1000:
             raise ValueError('history-scan-size-limit')
@@ -230,6 +232,11 @@ class Auditor:
             if kind in {'commit', 'tag'} and self.allow_github_noreply_identities:
                 data = self.public_commit_identities(data, kind)
             self.data_checks(data, name, origin)
+
+    def require_git_root(self, root):
+        actual = self.git(root, ['rev-parse', '--show-toplevel']).decode('utf-8').strip()
+        if Path(actual).resolve() != Path(root).resolve():
+            raise ValueError('git-root-mismatch; refusing to inspect a parent repository')
 
     @staticmethod
     def public_commit_identities(data, kind='commit'):

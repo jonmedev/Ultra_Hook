@@ -103,6 +103,18 @@ class AuditTests(unittest.TestCase):
             self.assertEqual(scanner.checked, 1)
 
     @unittest.skipUnless(shutil.which('git'), 'Git unavailable')
+    def test_archive_subdirectory_does_not_scan_parent_repository(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            result = subprocess.run(['git', '-C', str(root), 'init', '--quiet'], capture_output=True, shell=False)
+            self.assertEqual(result.returncode, 0)
+            extracted = root / 'extracted-archive'
+            extracted.mkdir()
+            for operation in ('staged', 'history'):
+                with self.assertRaisesRegex(ValueError, 'git-root-mismatch'):
+                    getattr(audit.Auditor(), operation)(extracted)
+
+    @unittest.skipUnless(shutil.which('git'), 'Git unavailable')
     def test_annotated_public_tag_is_allowed_but_tag_message_is_scanned(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

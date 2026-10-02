@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest import mock
 
@@ -251,8 +252,8 @@ class InstallerTests(unittest.TestCase):
         executable.write_bytes(b'synthetic executable')
         self.assertEqual(setup_agentcontroller.dotnet_executable(executable), str(executable.resolve()))
         with mock.patch.object(setup_agentcontroller.shutil, 'which', return_value=None), \
-             mock.patch.object(setup_agentcontroller.os, 'name', 'nt'), \
-             mock.patch.dict(setup_agentcontroller.os.environ, {'ProgramFiles': str(self.root / 'Program Files')}):
+             mock.patch.object(setup_agentcontroller, 'os', SimpleNamespace(name='nt',
+                 environ={'ProgramFiles': str(self.root / 'Program Files')})):
             self.assertEqual(setup_agentcontroller.dotnet_executable(), str(executable))
 
     def test_doctor_transport_is_not_ui_validation(self):

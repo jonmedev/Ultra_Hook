@@ -3,6 +3,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -15,15 +16,25 @@ DIRECTORIES = ('.agents/plugins', '.github/workflows', 'plugins/ultra-hook', 'sc
 EXTENSIONS = {'.py', '.cjs', '.js', '.json', '.md', '.yml', '.yaml'}
 
 
+def reject_linked_components(path, root):
+    for component in (path, *path.parents):
+        if component == root:
+            break
+        if component.is_symlink() or (getattr(component.lstat(), 'st_file_attributes', 0) & 1024):
+            raise ValueError('Linked release input refused')
+
+
 def release_files(root):
     files = []
     for name in sorted(ROOT_FILES):
         path = root / name
+        reject_linked_components(path, root)
         if path.is_symlink() or not path.is_file():
             raise ValueError('Missing or linked release input: ' + name)
         files.append(path)
     for directory in DIRECTORIES:
         base = root / directory
+        reject_linked_components(base, root)
         if not base.is_dir() or base.is_symlink():
             raise ValueError('Missing or linked release directory: ' + directory)
         for path in sorted(base.rglob('*')):
@@ -41,7 +52,7 @@ def release_files(root):
 
 def build(root, output):
     version = json.loads((root / 'plugins/ultra-hook/plugin.json').read_text())['version']
-    if not __import__('re').fullmatch(r'\d+\.\d+\.\d+(?:-[a-z0-9.]+)?', version):
+    if not re.fullmatch(r'\d+\.\d+\.\d+(?:-[a-z0-9.]+)?', version):
         raise ValueError('Invalid package version')
     output.mkdir(parents=True, exist_ok=True)
     name = 'ultra-hook-' + version
