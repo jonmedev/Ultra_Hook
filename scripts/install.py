@@ -301,6 +301,67 @@ def controller_registration(config, command=None):
     return {'registered': False, 'add': command is not None, 'command': str(command) if command else None}
 
 
+def acquisition_result(document, *, destination=None, dry_run=False):
+    """Validate the acquisition helper's public contract before registration."""
+    if (not isinstance(document, dict) or 'command' not in document
+            or document.get('status') not in ('plan', 'acquired', 'reused', 'pending')
+            or not isinstance(document.get('provenance'), dict)):
+        raise InstallError('AgentController acquisition returned invalid metadata; no registration was changed.')
+    command = document.get('command')
+    if command is not None:
+        if not isinstance(command, str) or not Path(command).is_absolute():
+            raise InstallError('AgentController acquisition must return an absolute local launcher path.')
+        path = guard_path(command, regular=True)
+        if destination is not None and not path.is_relative_to(destination):
+            raise InstallError('AgentController acquisition returned a launcher outside its destination.')
+        if not dry_run:
+            if not path.is_file() or document['status'] not in ('acquired', 'reused'):
+                raise InstallError('AgentController acquisition did not produce a verified launcher.')
+            digest = document['provenance'].get('binarySha256')
+            if not isinstance(digest, str) or not re.fullmatch('[0-9a-fA-F]{64}', digest):
+                raise InstallError('AgentController launcher provenance has no valid SHA256 digest.')
+            with path.open('rb') as handle:
+                actual = hashlib.file_digest(handle, 'sha256').hexdigest()
+            if actual != digest.lower():
+                raise InstallError('AgentController launcher differs from its recorded SHA256; registration refused.')
+    elif document['status'] not in ('plan', 'pending'):
+        raise InstallError('AgentController acquisition produced no launcher; registration refused.')
+    public_provenance_keys = {'schema', 'owner', 'platform', 'source', 'commit', 'runtime', 'version',
+                              'license', 'method', 'archiveSha256', 'binarySha256'}
+    public = {key: document[key] for key in ('status', 'command', 'next') if key in document}
+    # The helper owns its full runtime inventory. Do not duplicate thousands of
+    # per-file hashes into the profile receipt or novice-facing installer JSON.
+    public['provenance'] = {key: value for key, value in document['provenance'].items() if key in public_provenance_keys}
+    return public
+
+
+def request_acquisition(provider, destination, *, dry_run):
+    try:
+        return acquisition_result(provider(destination, dry_run=dry_run), destination=destination, dry_run=dry_run)
+    except InstallError:
+        raise
+    except (ValueError, OSError, RuntimeError, TypeError, KeyError) as exc:
+        import setup_agentcontroller
+        safe_error = getattr(setup_agentcontroller, 'AcquisitionError', ())
+        if isinstance(exc, safe_error):
+            raise InstallError(str(exc)) from exc
+        raise InstallError('AgentController acquisition failed; private diagnostics withheld. Check its prerequisites and retained acquisition directory before retrying.') from exc
+
+
+def existing_controller_acquisition(config):
+    current = config.get('mcp_servers', {}).get(SERVER)
+    if (not current or set(current) - {'command', 'args', 'enabled', 'startup_timeout_sec', 'tool_timeout_sec'}
+            or not isinstance(current.get('command'), str) or current.get('args') or current.get('enabled') is False):
+        raise InstallError('Existing AgentController needs review: --with-agentcontroller requires an enabled simple local launcher and never replaces another registration.')
+    command = guard_path(Path(os.path.abspath(Path(current['command']).expanduser())), regular=True)
+    if not command.is_file():
+        raise InstallError('The registered AgentController launcher is missing; review it before acquisition.')
+    with command.open('rb') as handle:
+        digest = hashlib.file_digest(handle, 'sha256').hexdigest()
+    return {'status': 'reused', 'command': str(command),
+            'provenance': {'method': 'existing-registration', 'binarySha256': digest}}
+
+
 def fingerprint(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, default=str).encode('utf-8')).hexdigest()
 
@@ -381,7 +442,12 @@ def installation_lock(home):
             pass
 
 
-def install(repo, home, cli, *, dry_run=False, agentcontroller_command=None, replace_cas=False, runtime_check=None):
+def install(repo, home, cli, *, dry_run=False, agentcontroller_command=None, replace_cas=False, runtime_check=None,
+            with_agentcontroller=False, agentcontroller_dir=None, acquisition_provider=None):
+    if with_agentcontroller and agentcontroller_command:
+        raise InstallError('Choose --with-agentcontroller or --agentcontroller-command, not both.')
+    if agentcontroller_dir is not None and not with_agentcontroller:
+        raise InstallError('--agentcontroller-dir requires --with-agentcontroller.')
     home = guard_path(home)
     guard_path(home / '.ultra-hook')
     repo = Path(repo).resolve()
@@ -392,6 +458,18 @@ def install(repo, home, cli, *, dry_run=False, agentcontroller_command=None, rep
     if private_bytes(home / 'config.toml') != initial_bytes:
         raise InstallError('Config changed during planning; rerun.')
     controller = controller_registration(initial, agentcontroller_command)
+    acquisition = None
+    acquire_required = False
+    destination = None
+    if with_agentcontroller:
+        destination = guard_path(Path(os.path.abspath(Path(agentcontroller_dir).expanduser()))
+                                 if agentcontroller_dir is not None else home / 'tools/agentcontroller')
+        if SERVER in initial.get('mcp_servers', {}):
+            acquisition = existing_controller_acquisition(initial)
+            controller = controller_registration(initial, acquisition['command'])
+            acquire_required = Path(acquisition['command']).is_relative_to(destination)
+        else:
+            acquire_required = True
     known_markets = marketplaces(cli)
     market = known_markets.get(MARKETPLACE)
     if market and not same_path(market.get('root', ''), repo):
@@ -399,6 +477,16 @@ def install(repo, home, cli, *, dry_run=False, agentcontroller_command=None, rep
     installed = plugin_catalog(cli).get(PLUGIN) if market else None
     if installed and installed.get('version') != version:
         raise InstallError('A different Ultra Hook version is installed. Uninstall the owned installation and review the new version before installing it.')
+    if acquire_required:
+        if acquisition_provider is None:
+            from setup_agentcontroller import acquire
+            acquisition_provider = acquire
+        acquisition = request_acquisition(acquisition_provider, destination, dry_run=True)
+        if controller['registered']:
+            if not acquisition['command'] or not same_path(acquisition['command'], controller['command']):
+                raise InstallError('Managed AgentController provenance does not match the existing registration; no replacement is allowed.')
+        else:
+            controller = {'registered': False, 'add': acquisition['command'] is not None, 'command': acquisition['command']}
     cas_enabled = initial.get('plugins', {}).get(CAS, {}).get('enabled', False)
     actions = []
     if not market:
@@ -411,6 +499,8 @@ def install(repo, home, cli, *, dry_run=False, agentcontroller_command=None, rep
             'commands': [cli.prefix + action for action in actions], 'casDetected': bool(cas_enabled),
             'replaceCasRequested': replace_cas, 'hookTrust': 'review current definitions in Codex /hooks',
             'agentcontroller': {'registered': controller['registered'], 'willRegister': controller['add']}}
+    if acquisition is not None:
+        plan['agentcontroller']['acquisition'] = acquisition
     if dry_run:
         return {'status': 'plan', **plan}
     from doctor import runtime_metadata
@@ -451,6 +541,20 @@ def install(repo, home, cli, *, dry_run=False, agentcontroller_command=None, rep
         completed = []
         expected_bytes = baseline
         try:
+            if acquire_required:
+                acquired = request_acquisition(acquisition_provider, destination, dry_run=False)
+                if controller['registered'] and (not acquired['command'] or not same_path(acquired['command'], controller['command'])):
+                    raise InstallError('Acquired AgentController differs from the existing registration; replacement refused.')
+                acquisition = acquired
+                plan['agentcontroller']['acquisition'] = acquired
+                actions = [action for action in actions if action[:2] != ['mcp', 'add']]
+                if not controller['registered']:
+                    controller = {'registered': False, 'add': acquired['command'] is not None, 'command': acquired['command']}
+                    owned['mcp'] = bool(old_receipt.get('createdMcp')) or controller['add']
+                    if controller['add']:
+                        actions.append(['mcp', 'add', SERVER, '--', controller['command']])
+                plan['commands'] = [cli.prefix + action for action in actions]
+                plan['agentcontroller']['willRegister'] = controller['add']
             for action in actions:
                 if private_bytes(config_file) != expected_bytes:
                     raise InstallError('Config changed concurrently before a CLI mutation; refusing to continue.')
@@ -466,7 +570,7 @@ def install(repo, home, cli, *, dry_run=False, agentcontroller_command=None, rep
                 raise InstallError('The CLI changed an unrelated preference; rolling back this transaction.')
             try:
                 metadata = (runtime_check(cli, repo, check_agentcontroller=True)
-                            if agentcontroller_command and runtime_check is runtime_metadata else runtime_check(cli, repo))
+                            if (agentcontroller_command or with_agentcontroller and controller['command']) and runtime_check is runtime_metadata else runtime_check(cli, repo))
             except (InstallError, OSError):
                 metadata = {'trustedHookCount': 0, 'skillCount': 0, 'hooksReady': False,
                             'trustPending': True, 'diagnostic': 'Runtime metadata unavailable; inspect Codex /hooks before migration.'}
@@ -488,6 +592,8 @@ def install(repo, home, cli, *, dry_run=False, agentcontroller_command=None, rep
                                           if controller['add'] else old_receipt.get('mcpFingerprint')),
                        'disabledCas': cas_disabled, 'migrationPending': migration_pending,
                        'runtime': metadata}
+            if acquisition is not None:
+                receipt['agentcontrollerAcquisition'] = acquisition
             write_private(previous_receipt, json.dumps(receipt, indent=2).encode('utf-8'), expected=receipt_bytes)
             return {'status': 'installed', **plan, 'runtime': metadata, 'migrationPending': migration_pending,
                     'backup': str(transaction)}
@@ -539,7 +645,11 @@ def install(repo, home, cli, *, dry_run=False, agentcontroller_command=None, rep
                     config_file.unlink()
             else:
                 errors.append('unrelated config changed; backup retained without overwriting it')
-            raise InstallError('Installation failed; rollback attempted. Backup: ' + str(transaction) +
+            acquisition_hint = (' AgentController acquisition files were retained; inspect them before retrying.'
+                                if acquire_required else '')
+            acquisition_reason = (' Reason: ' + str(exc) if acquire_required and isinstance(exc, InstallError) else '')
+            raise InstallError('Installation failed; rollback attempted. Backup: ' + str(transaction) + acquisition_hint +
+                               acquisition_reason +
                                ('. ' + '; '.join(errors) if errors else '')) from exc
 
 
@@ -587,6 +697,11 @@ def human_result(operation, result):
             lines.append('Restore CAS if this installation disabled it.')
         if result.get('replaceCasRequested') and result.get('casDetected'):
             lines.append('CAS migration requested; disabling CAS requires verified runtime definitions and trusted hooks.')
+        acquisition = result.get('agentcontroller', {}).get('acquisition')
+        if acquisition:
+            lines.append('AgentController acquisition: ' + acquisition['status'] + '; this plan does not fetch or build anything.')
+            if acquisition.get('next'):
+                lines.append('AgentController next step: ' + acquisition['next'])
         lines.append('Plan only; no changes made.')
         lines.append(f'Next: rerun scripts/{operation}.py with the same options, without --dry-run.')
         return '\n'.join(lines)
@@ -600,6 +715,13 @@ def human_result(operation, result):
         lines.extend(runtime_guidance(result.get('runtime', {})))
         if result.get('migrationPending'):
             lines.append('CAS migration is pending; CAS remains enabled. Complete runtime verification and hook trust, then rerun with --replace-cas.')
+        acquisition = result.get('agentcontroller', {}).get('acquisition')
+        if acquisition:
+            lines.append('AgentController acquisition: ' + acquisition['status'] + '.')
+            if acquisition['status'] == 'pending':
+                lines.append('AgentController setup is pending; the combined installation is not complete and no new MCP registration was added.')
+            if acquisition.get('next'):
+                lines.append('AgentController next step: ' + acquisition['next'])
         if not result.get('agentcontroller', {}).get('registered') and not result.get('agentcontroller', {}).get('willRegister'):
             lines.append('AgentController is not registered. Installation works without it; UI validation requires its setup in README.md.')
         else:
@@ -650,6 +772,8 @@ def parser():
     result.add_argument('--codex-home', help='Explicit Codex profile directory (use synthetic directories for tests).')
     result.add_argument('--codex-command', help='Existing Codex executable path.')
     result.add_argument('--agentcontroller-command', help='Existing AgentController stdio launcher; never overwritten.')
+    result.add_argument('--with-agentcontroller', action='store_true', help='Explicitly acquire and register AgentController, or reuse an existing reviewed local registration.')
+    result.add_argument('--agentcontroller-dir', help='Acquisition directory; default CODEX_HOME/tools/agentcontroller. Requires --with-agentcontroller.')
     result.add_argument('--replace-cas', action='store_true', help='Disable CAS only after 5 trusted new hooks and 2 skills are verified.')
     return result
 
@@ -657,9 +781,12 @@ def parser():
 def main():
     args = parser().parse_args()
     try:
+        if args.with_agentcontroller and not args.dry_run and not args.json:
+            print('Preparing optional AgentController setup; source builds can take several minutes.', file=sys.stderr)
         home = codex_home(args.codex_home)
         result = install(REPO, home, CLI(home, args.codex_command), dry_run=args.dry_run,
-                         agentcontroller_command=args.agentcontroller_command, replace_cas=args.replace_cas)
+                         agentcontroller_command=args.agentcontroller_command, replace_cas=args.replace_cas,
+                         with_agentcontroller=args.with_agentcontroller, agentcontroller_dir=args.agentcontroller_dir)
         emit_result('install', result, json_output=args.json)
         return 0
     except InstallError as exc:

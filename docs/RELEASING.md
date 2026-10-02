@@ -14,6 +14,12 @@
    Also verify the quick-start native commands from a fresh profile outside this
    checkout: Git marketplace add with the release tag, plugin add, metadata discovery
    and native removal. Test upgrades through the documented remove/reinstall path.
+   Test complete setup through `Install.cmd` / `install.sh` or the equivalent
+   `install.py --with-agentcontroller`, including repeat acquisition and native
+   registration. Release CI runs real acquisition on Windows, Linux and macOS;
+   Windows/Linux probe MCP, while macOS verifies download integrity and pending
+   manual setup. A Windows desktop flow requires separate AgentController assertions
+   and a focused screenshot. Do not label macOS/Linux desktop UI validated by CI.
 4. When a UI surface changed, perform the relevant AgentController check on a
    supported target and retain evidence locally. Otherwise state why UI QA is
    not applicable and exercise the affected CLI/API/library. Publish screenshots
@@ -23,7 +29,7 @@
    Publishing requires the maintainer's explicit decision; preparing this repository
    does not itself push commits, create tags or publish a release.
 6. Once publication is authorized, push the reviewed commits and an annotated
-   version tag such as `v0.1.4`. The tag workflow reruns CI and verifies that the tag
+   version tag such as `v0.2.0`. The tag workflow reruns CI and verifies that the tag
    matches the manifest before creating the GitHub release with ZIP and checksum.
    It also signs build provenance. Download the published archive, verify its
    attestation against the expected repository/workflow/tag, compare its bytes with

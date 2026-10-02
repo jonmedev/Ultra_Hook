@@ -30,6 +30,8 @@ RELEASE_FILES = frozenset('''
 .gitignore
 AGENTS.md
 LICENSE
+Install.cmd
+install.sh
 NOTICE
 README.md
 SECURITY.md
@@ -70,6 +72,8 @@ tests/test_audit_release.py
 tests/test_build_release.py
 tests/test_install.py
 tests/test_install_security.py
+tests/test_controller_setup.py
+tests/controller_smoke.py
 '''.split())
 RELEASE_DIRS = frozenset(str(parent) for name in RELEASE_FILES
                          for parent in PurePosixPath(name).parents if str(parent) != '.')

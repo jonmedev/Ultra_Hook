@@ -51,8 +51,15 @@ def linked_stat(info):
         getattr(info, 'st_file_attributes', 0) & getattr(stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 1024))
 
 
-def fingerprint(info):
-    return (info.st_dev, info.st_ino, info.st_mode, info.st_nlink, info.st_size,
+def fingerprint(info, *, descriptor_comparison=False):
+    mode = info.st_mode
+    if descriptor_comparison and os.name == 'nt':
+        # Windows pathname stat synthesizes execute bits for .cmd/.bat/.com/.exe
+        # names; descriptor fstat has no filename and omits them (Python 3.11).
+        # Normalize only that cross-API difference. Same-API snapshots below
+        # still compare every mode bit, and all identity/link/time fields remain.
+        mode &= ~0o111
+    return (info.st_dev, info.st_ino, mode, info.st_nlink, info.st_size,
             info.st_mtime_ns, info.st_ctime_ns)
 
 
@@ -95,7 +102,7 @@ def read_regular(path, root, max_bytes=MAX_BYTES):
     descriptor = os.open(path, flags)
     try:
         opened = os.fstat(descriptor)
-        if fingerprint(opened) != fingerprint(before):
+        if fingerprint(opened, descriptor_comparison=True) != fingerprint(before, descriptor_comparison=True):
             raise InputError('input-changed-during-read')
         data = bytearray()
         while len(data) <= max_bytes:

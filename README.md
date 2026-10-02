@@ -6,21 +6,46 @@ result. Small tasks stay direct.
 
 **[Quick start](docs/GETTING_STARTED.md)** · **[Releases](https://github.com/jonmedev/Ultra_Hook/releases)**
 
-## Install with two commands
+## Install Ultra Hook and AgentController together
 
-You need [Codex CLI](https://developers.openai.com/codex/cli/) installed and signed in,
-[Node.js LTS](https://nodejs.org/en/download), and [Git](https://git-scm.com/downloads/).
+**[Download the setup ZIP](https://github.com/jonmedev/Ultra_Hook/releases/download/v0.2.0/ultra-hook-0.2.0.zip)**
+
+1. Extract it into a folder you will keep.
+2. **Windows:** double-click `Install.cmd`. **macOS/Linux:** open Terminal in that
+   folder and run `sh install.sh`.
+3. Follow the result shown by the installer, then activate the hooks below.
+
+The launcher installs Ultra Hook, downloads AgentController from Kasempiternal's
+project and prepares the platform backend. On Windows it builds and registers the
+stdio executable; on Linux it prepares and registers an isolated Python launcher.
+On macOS it downloads and verifies the official DMG; installing the app and granting
+desktop permissions remain explicit user steps. A pending step is reported as pending.
+The official macOS app requires Apple Silicon and macOS 14 or newer; this DMG does
+not support Intel Macs.
+
+One-time prerequisites: signed-in [Codex CLI](https://developers.openai.com/codex/cli/),
+[Node.js LTS](https://nodejs.org/en/download), [Python 3.11+](https://www.python.org/downloads/)
+and [Git](https://git-scm.com/downloads/). Windows also needs the
+[.NET 9 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/9.0) to build the
+upstream backend; there is no official Windows binary download. The installer
+checks prerequisites before downloading and does not silently install system tools.
+
 Already using Ultra Hook or CAS? Read [update and migration instructions](docs/GETTING_STARTED.md#update-or-remove) first.
+
+### Only need the Codex plugin?
+
+For code/research work without desktop UI testing, use the smaller native install.
+It needs Codex CLI, Node.js and Git:
 
 Open **PowerShell on Windows** or **Terminal on macOS/Linux** and run each line:
 
 ```sh
-codex plugin marketplace add jonmedev/Ultra_Hook --ref v0.1.4
+codex plugin marketplace add jonmedev/Ultra_Hook --ref v0.2.0
 codex plugin add ultra-hook@ultra-hook
 ```
 
-**Codex downloads and installs Ultra Hook.** No manual ZIP download, extraction,
-repository checkout or Python installation is needed for this method.
+These two commands install only the plugin. To add automatic controller setup later,
+follow the [controller setup guide](docs/GETTING_STARTED.md#optional-agentcontroller).
 
 ## Activate and start
 
@@ -46,7 +71,7 @@ should be enabled and its five hooks approved in `/hooks`.
 | Review code | Add the review scope and `read-only; do not edit` if you only want findings |
 | Research a decision | Describe the question, constraints and evidence you need |
 | Work without extra agents | Add `without subagents` |
-| Validate an app's buttons, windows or user flows | Install AgentController separately, then use `$agentcontroller` |
+| Validate an app's buttons, windows or user flows | Complete AgentController setup above, then use `$agentcontroller` |
 
 The plugin includes **two skills** (instructions Codex can follow) and **five hooks**
 (workflow reminders and checks for recognized sensitive operations). It preserves
@@ -69,19 +94,20 @@ Ultra Hook provides the integration skill; the controller is a separate project.
   or [Linux guide](https://github.com/Kasempiternal/agentcontroller/blob/master/Linux/README.md).
   Release 2.5.0 has no Windows executable asset; its source ZIP is not an installer.
 
-After installing it, follow [Connect AgentController to Codex](docs/GETTING_STARTED.md#optional-agentcontroller).
-Installing our skill does not install or connect the controller. UI validation
+The complete setup above downloads it for you; the native plugin-only route does
+not. See [platform setup details](docs/GETTING_STARTED.md#optional-agentcontroller).
+UI validation
 requires assertions on the real target; discovering tools alone is not a UI pass.
 
 ## Updates, removal and alternative downloads
 
 [Update or uninstall](docs/GETTING_STARTED.md#update-or-remove)
 · [Troubleshooting](docs/GETTING_STARTED.md#if-something-is-missing)
-· [Download ZIP 0.1.4](https://github.com/jonmedev/Ultra_Hook/releases/download/v0.1.4/ultra-hook-0.1.4.zip)
+· [Download setup ZIP](https://github.com/jonmedev/Ultra_Hook/releases/download/v0.2.0/ultra-hook-0.2.0.zip)
 · [Advanced ZIP installation and diagnostics](docs/ADVANCED_INSTALL.md)
 
-The ZIP is an alternative for script-managed installations. Do not combine both
-installation methods on an existing registration.
+The ZIP launchers use script-managed installation with receipts and backups.
+Do not combine installation methods on an existing registration.
 
 [Security and download verification](SECURITY.md) · [K-stack comparison](docs/KSTACK_COMPARISON.md)
 · [Credits](NOTICE) · [License](LICENSE)

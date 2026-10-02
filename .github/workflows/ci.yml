@@ -4,6 +4,7 @@ on:
     branches: ['**']
   pull_request:
   workflow_call:
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
@@ -33,5 +34,36 @@ jobs:
           package-manager-cache: false
       - run: python -B scripts/validate.py
       - run: python -B -m unittest discover -s tests
+      - name: Check Windows installer entry point
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: Install.cmd --help
+      - name: Check Unix installer entry point
+        if: runner.os != 'Windows'
+        run: sh install.sh --help
       - run: node --test plugins/ultra-hook/hooks/tests/team-routing.test.cjs plugins/ultra-hook/hooks/tests/safety-windows.test.cjs plugins/ultra-hook/hooks/tests/security-boundaries.test.cjs
       - run: python -B scripts/audit_release.py --git-staged --git-history --allow-github-noreply-identities
+  controller-setup:
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        if: runner.os == 'Windows'
+        with:
+          dotnet-version: '9.0.x'
+      - name: Download, reuse and probe the platform controller
+        shell: bash
+        run: python -B tests/controller_smoke.py --destination "$RUNNER_TEMP/controller integration"

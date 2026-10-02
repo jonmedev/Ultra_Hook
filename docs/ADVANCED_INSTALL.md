@@ -1,6 +1,6 @@
 # Advanced ZIP installation and diagnostics
 
-For the recommended two-command download/install, use the [quick start](GETTING_STARTED.md).
+For complete setup or the plugin-only two-command route, use the [quick start](GETTING_STARTED.md).
 This page is the alternative for manually extracted packages, script-managed
 profiles, transactional receipts and detailed diagnostics. It requires Python 3.11+.
 Do not run these management scripts over a native Git-marketplace installation.
@@ -44,6 +44,14 @@ A Git checkout also works. For reproducible installation, check out the reviewed
 release tag. Updating files in place does not by itself update the installed cache.
 
 ## 3. Preview and install
+
+To include AgentController acquisition and registration in the same transaction,
+use `--with-agentcontroller` on the commands below, or run the root `Install.cmd`
+(Windows) / `sh install.sh` (macOS/Linux). An optional `--agentcontroller-dir`
+selects the destination; by default it is `CODEX_HOME/tools/agentcontroller`.
+The controller remains Kasempiternal's software. Its prerequisites, acquired files,
+checksums and pending platform steps are separate from native hook approval.
+Never combine `--with-agentcontroller` with `--agentcontroller-command`.
 
 ```sh
 python -B scripts/install.py --dry-run

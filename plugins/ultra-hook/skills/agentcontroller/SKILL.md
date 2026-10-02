@@ -9,6 +9,9 @@ AgentController is developed by **[Kasempiternal](https://github.com/Kasempitern
 This skill is Ultra Hook's integration guidance, not the controller application.
 Use the [upstream downloads](https://github.com/Kasempiternal/agentcontroller/releases)
 and [platform setup instructions](https://github.com/Kasempiternal/agentcontroller#installation).
+Ultra Hook's [complete setup](https://github.com/jonmedev/Ultra_Hook/blob/main/docs/GETTING_STARTED.md#install-the-complete-setup)
+can acquire the upstream controller when installation is requested. Check existing
+registrations first and retain any reported platform or permission steps as pending.
 When setup is missing, include those links and identify the target platform; do not
 imply that installing this skill installed the application or that Ultra Hook owns it.
 

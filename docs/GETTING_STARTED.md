@@ -4,7 +4,45 @@ Ultra Hook helps Codex implement, debug, review and research with appropriate
 verification and useful native teammates. Small tasks stay direct. It preserves
 your chosen leader and permissions. It does not unlock models or guarantee savings.
 
-## Install with two commands
+## Install the complete setup
+
+Download the [setup ZIP](https://github.com/jonmedev/Ultra_Hook/releases/download/v0.2.0/ultra-hook-0.2.0.zip),
+[verify it](../SECURITY.md#verify-a-download), and extract it into a permanent folder.
+On Windows double-click `Install.cmd`; on macOS/Linux run `sh install.sh` there.
+Both launchers run the same supported command:
+
+```sh
+python -B scripts/install.py --with-agentcontroller
+```
+
+The installer gets AgentController from its upstream project, prepares it and
+registers the ready launcher with Codex. It checks existing registrations first
+and does not overwrite another controller. Repeat runs verify owned files before
+reuse. Downloads/builds stay under your Codex profile's `tools/agentcontroller`
+directory unless you choose `--agentcontroller-dir`.
+
+Requirements: signed-in Codex CLI, Node.js LTS, Git and Python 3.11+. Windows needs
+the .NET 9 SDK for the upstream source build. These prerequisites are checked but
+not installed silently. On macOS the official DMG download is automated; app
+installation, permissions and the bridge remain pending until completed below.
+On Linux desktop access needs the optional system helpers described upstream.
+
+Windows source builds need a short acquisition path because NuGet creates deep
+package directories. If the installer reports that the path exceeds 100 characters,
+choose a shorter empty folder with `--agentcontroller-dir`; for example, run
+`python -B scripts/install.py --with-agentcontroller --agentcontroller-dir "%USERPROFILE%\AgentController"`
+in Command Prompt. Your ZIP source folder can remain where you extracted it.
+
+To preview without downloading or changing registrations:
+
+```sh
+python -B scripts/install.py --with-agentcontroller --dry-run
+```
+
+Do not mix this method with an existing native Git-marketplace installation.
+Follow [update or remove](#update-or-remove) before changing installation methods.
+
+## Plugin-only installation: two commands
 
 Have [Codex CLI](https://developers.openai.com/codex/cli/) installed and signed in,
 plus [Node.js LTS](https://nodejs.org/en/download) and [Git](https://git-scm.com/downloads/).
@@ -13,7 +51,7 @@ For an existing Ultra Hook/CAS installation, read [updates](#update-or-remove) f
 Open **PowerShell on Windows** or **Terminal on macOS/Linux**, then run each line:
 
 ```sh
-codex plugin marketplace add jonmedev/Ultra_Hook --ref v0.1.4
+codex plugin marketplace add jonmedev/Ultra_Hook --ref v0.2.0
 codex plugin add ultra-hook@ultra-hook
 ```
 
@@ -56,6 +94,23 @@ not evidence that a task or UI flow has been tested.
 
 ## Optional AgentController
 
+The complete setup downloads/prepares AgentController automatically. For an
+existing script-managed installation, rerun `Install.cmd`, `sh install.sh`, or
+`python -B scripts/install.py --with-agentcontroller` from its original folder.
+For a native plugin-only installation, either keep it and register a separately
+installed controller below, or remove it using the native commands before choosing
+the complete setup. Existing registrations and unrelated preferences are preserved.
+
+| Platform | Automated by complete setup | Still requires your environment |
+| --- | --- | --- |
+| Windows | Fetch pinned source, build and register its stdio executable | Git and .NET 9 SDK; an accessible desktop target |
+| Linux | Fetch pinned source, create isolated stdlib launcher and register it | Desktop session and upstream AT-SPI/capture helper packages |
+| macOS | Download the official 2.5.0 DMG and verify SHA-256 | Apple Silicon, macOS 14+; install/open the app, grant permissions and register its bridge |
+
+Windows/Linux use reviewed commit `bc6db97122d6adf07342d3efc87e7ac7c96b4889`;
+the macOS DMG is a separate upstream release. There is no single cross-platform
+binary release. Upstream authorship and licenses are retained with the acquired files.
+
 You can program, debug and review code without installing AgentController.
 You need it when using Ultra Hook to validate UI behavior, such as clicking a
 button and checking what the application displays.
@@ -73,6 +128,10 @@ is already configured. Do not overwrite an existing registration.
 **macOS:** launch AgentController.app, grant it Accessibility and Screen Recording
 permissions, and complete [upstream setup](https://github.com/Kasempiternal/agentcontroller#setup)
 so its stdio bridge exists. Register the bridge, not the `.app` bundle:
+
+The official DMG requires Apple Silicon and macOS 14+; Intel Macs are unsupported.
+Recording features require macOS 15+. A verified download does not check these
+desktop prerequisites or grant permissions.
 
 ```sh
 codex mcp add agentcontroller -- "$HOME/.agentcontroller/agentcontroller-mcp-bridge.sh"

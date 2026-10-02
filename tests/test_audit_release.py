@@ -11,6 +11,7 @@ import sys
 import tempfile
 import unittest
 from unittest import mock
+from types import SimpleNamespace
 
 sys.dont_write_bytecode = True
 spec = importlib.util.spec_from_file_location('audit_release', Path(__file__).resolve().parents[1] / 'scripts/audit_release.py')
@@ -19,6 +20,48 @@ spec.loader.exec_module(audit)
 
 
 class AuditTests(unittest.TestCase):
+    def test_windows_named_executable_bits_do_not_reject_stable_command_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / 'Install.cmd'
+            source.write_bytes(b'@echo off\r\necho Synthetic public fixture\r\n')
+            self.assertEqual(audit.read_regular(source, root), source.read_bytes())
+
+    def test_windows_cross_api_normalization_preserves_identity_and_write_checks(self):
+        values = dict(st_dev=7, st_ino=11, st_mode=0o100777, st_nlink=1, st_size=5,
+                      st_mtime_ns=100, st_ctime_ns=90)
+        named = SimpleNamespace(**values)
+        opened_values = {**values, 'st_mode': 0o100666}
+        opened = SimpleNamespace(**opened_values)
+        with mock.patch.object(audit.os, 'name', 'nt'):
+            self.assertNotEqual(audit.fingerprint(named), audit.fingerprint(opened))
+            self.assertEqual(audit.fingerprint(named, descriptor_comparison=True),
+                             audit.fingerprint(opened, descriptor_comparison=True))
+            for field, value in (('st_dev', 8), ('st_ino', 12), ('st_nlink', 2), ('st_size', 6),
+                                 ('st_mtime_ns', 101), ('st_ctime_ns', 91), ('st_mode', 0o100444)):
+                with self.subTest(field=field):
+                    changed = SimpleNamespace(**{**opened_values, field: value})
+                    self.assertNotEqual(audit.fingerprint(named, descriptor_comparison=True),
+                                        audit.fingerprint(changed, descriptor_comparison=True))
+        with mock.patch.object(audit.os, 'name', 'posix'):
+            self.assertNotEqual(audit.fingerprint(named, descriptor_comparison=True),
+                                audit.fingerprint(opened, descriptor_comparison=True))
+
+    def test_command_file_replacement_during_open_is_still_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / 'Install.cmd'
+            source.write_bytes(b'initial command')
+            original_open = audit.os.open
+            def replace_before_open(path, flags):
+                replacement = root / 'replacement.cmd'
+                replacement.write_bytes(source.read_bytes())
+                os.replace(replacement, source)
+                return original_open(path, flags)
+            with mock.patch.object(audit.os, 'open', side_effect=replace_before_open):
+                with self.assertRaisesRegex(audit.InputError, 'input-changed'):
+                    audit.read_regular(source, root)
+
     def test_child_stdout_is_bounded_while_running_and_timeout_is_redacted(self):
         command = [sys.executable, '-B', '-c', 'import os,time; os.write(1,b"x"*4096); time.sleep(10)']
         with self.assertRaisesRegex(audit.InputError, 'git-output-size-limit'):

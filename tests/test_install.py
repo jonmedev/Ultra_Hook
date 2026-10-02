@@ -310,6 +310,143 @@ class InstallerTests(unittest.TestCase):
         result=self.execute(runtime_check=lambda *_:runtime())
         self.assertEqual((Path(result['backup'])/'receipt.json').read_bytes(),prior)
 
+    def acquisition_fixture(self, *, pending=False, fail=False, bad_hash=False):
+        calls=[]
+        def provider(destination, *, dry_run=False):
+            calls.append((destination,dry_run))
+            command=destination/'bin/controller.exe'
+            if dry_run:
+                return {'status':'plan','command':None if pending else str(command),'provenance':{'source':'synthetic public source'}}
+            if fail:
+                raise ValueError('synthetic secret diagnostic')
+            destination.mkdir(parents=True,exist_ok=True)
+            if pending:
+                (destination/'public download.dmg').write_bytes(b'public synthetic artifact')
+                return {'status':'pending','command':None,'provenance':{'source':'synthetic public source'},
+                        'next':'Install the downloaded application and review platform permissions.'}
+            reused=command.exists()
+            command.parent.mkdir(parents=True,exist_ok=True)
+            if not reused:
+                command.write_bytes(b'public synthetic controller')
+            digest=install.hashlib.sha256(command.read_bytes()).hexdigest()
+            return {'status':'reused' if reused else 'acquired','command':str(command),
+                    'provenance':{'source':'synthetic public source','binarySha256':'0'*64 if bad_hash else digest}}
+        return provider,calls
+
+    def test_joint_dry_run_never_fetches_or_creates_acquisition_directory(self):
+        provider,calls=self.acquisition_fixture()
+        result=self.execute(dry_run=True,with_agentcontroller=True,acquisition_provider=provider)
+        target=self.home/'tools/agentcontroller'
+        self.assertEqual(calls,[(target,True)])
+        self.assertFalse(target.exists())
+        self.assertTrue(result['agentcontroller']['willRegister'])
+        self.assertTrue(any(command[-2]=='--' for command in result['commands'] if 'mcp' in command))
+
+    def test_joint_acquisition_registers_verified_launcher_and_reuses_on_repeat(self):
+        provider,calls=self.acquisition_fixture()
+        before=install.load_config(self.home)
+        first=self.execute(with_agentcontroller=True,acquisition_provider=provider,runtime_check=lambda *_:runtime())
+        self.assertEqual(first['agentcontroller']['acquisition']['status'],'acquired')
+        receipt=json.loads((self.home/'.ultra-hook/receipt.json').read_bytes())
+        self.assertTrue(receipt['createdMcp'])
+        self.assertEqual(receipt['agentcontrollerAcquisition']['provenance']['binarySha256'],
+                         install.hashlib.sha256(b'public synthetic controller').hexdigest())
+        second=self.execute(with_agentcontroller=True,acquisition_provider=provider,runtime_check=lambda *_:runtime())
+        self.assertEqual(second['agentcontroller']['acquisition']['status'],'reused')
+        self.assertEqual(sum(call[:2]==['mcp','add']for call in self.cli.calls),1)
+        self.assertEqual(install.protected(install.load_config(self.home),add_mcp=True),install.protected(before,add_mcp=True))
+        self.assertEqual([dry for _,dry in calls],[True,False,True,False])
+
+    def test_joint_external_registration_is_reused_without_acquisition_or_ownership(self):
+        command=self.root/'existing controller.exe';command.write_bytes(b'external user launcher')
+        (self.home/'config.toml').write_text(INITIAL+'\n[mcp_servers.agentcontroller]\ncommand='+json.dumps(str(command))+'\n')
+        provider=mock.Mock(side_effect=AssertionError('external registration must not be downloaded again'))
+        result=self.execute(with_agentcontroller=True,acquisition_provider=provider,runtime_check=lambda *_:runtime())
+        self.assertEqual(result['agentcontroller']['acquisition']['provenance']['method'],'existing-registration')
+        self.assertFalse(json.loads((self.home/'.ultra-hook/receipt.json').read_bytes())['createdMcp'])
+        self.assertFalse(any(call[:2]==['mcp','add'] for call in self.cli.calls))
+
+    def test_joint_registration_conflicts_and_invalid_options_fail_before_acquisition(self):
+        provider=mock.Mock(side_effect=AssertionError('must not acquire'))
+        for options in ({'with_agentcontroller':True,'agentcontroller_command':'existing.exe'},
+                        {'agentcontroller_dir':self.root/'target'}):
+            with self.assertRaises(install.InstallError):
+                self.execute(acquisition_provider=provider,**options)
+        (self.home/'config.toml').write_text(INITIAL+'\n[mcp_servers.agentcontroller]\nurl="https://synthetic.invalid/mcp"\n')
+        with self.assertRaises(install.InstallError):
+            self.execute(with_agentcontroller=True,acquisition_provider=provider)
+        provider.assert_not_called()
+
+    def test_joint_pending_installation_never_registers_or_claims_transport(self):
+        provider,_=self.acquisition_fixture(pending=True)
+        result=self.execute(with_agentcontroller=True,acquisition_provider=provider,runtime_check=lambda *_:runtime())
+        self.assertEqual(result['status'],'installed')
+        self.assertEqual(result['agentcontroller']['acquisition']['status'],'pending')
+        self.assertFalse(result['agentcontroller']['registered'])
+        self.assertFalse(result['agentcontroller']['willRegister'])
+        self.assertNotIn('agentcontroller',install.load_config(self.home).get('mcp_servers',{}))
+        self.assertIn('pending',install.human_result('install',result))
+
+    def test_joint_acquisition_failure_keeps_config_and_no_cli_mutations(self):
+        provider,_=self.acquisition_fixture(fail=True)
+        before=(self.home/'config.toml').read_bytes()
+        with self.assertRaises(install.InstallError) as raised:
+            self.execute(with_agentcontroller=True,acquisition_provider=provider,runtime_check=lambda *_:runtime())
+        self.assertNotIn('synthetic secret',str(raised.exception))
+        self.assertEqual((self.home/'config.toml').read_bytes(),before)
+        self.assertFalse(any(call[:2] in (['plugin','add'],['mcp','add']) or call[:3]==['plugin','marketplace','add'] for call in self.cli.calls))
+
+    def test_joint_hash_mismatch_and_failed_cli_keep_artifact_without_registration(self):
+        provider,_=self.acquisition_fixture(bad_hash=True)
+        before=(self.home/'config.toml').read_bytes()
+        with self.assertRaises(install.InstallError):
+            self.execute(with_agentcontroller=True,acquisition_provider=provider,runtime_check=lambda *_:runtime())
+        self.assertEqual((self.home/'config.toml').read_bytes(),before)
+        self.assertTrue((self.home/'tools/agentcontroller/bin/controller.exe').exists())
+        provider,_=self.acquisition_fixture()
+        self.cli.fail_add=True
+        with self.assertRaises(install.InstallError):
+            self.execute(with_agentcontroller=True,acquisition_provider=provider,runtime_check=lambda *_:runtime())
+        self.assertEqual((self.home/'config.toml').read_bytes(),before)
+        self.assertTrue((self.home/'tools/agentcontroller/bin/controller.exe').exists())
+        self.assertNotIn('agentcontroller',install.load_config(self.home).get('mcp_servers',{}))
+
+    def test_joint_receipt_source_failure_happens_before_real_acquisition(self):
+        self.execute(runtime_check=lambda *_:runtime())
+        self.cli.markets.clear();self.cli.installed=False
+        provider,calls=self.acquisition_fixture()
+        with self.assertRaises(install.InstallError):
+            install.install(self.new_source(),self.home,self.cli,with_agentcontroller=True,
+                            acquisition_provider=provider,runtime_check=lambda *_:runtime())
+        self.assertTrue(calls)
+        self.assertTrue(all(dry_run for _,dry_run in calls))
+
+    def test_joint_provider_safe_prerequisite_errors_remain_actionable(self):
+        def provider(destination, *, dry_run=False):
+            if dry_run:
+                return {'status':'plan','command':str(destination/'controller.exe'),'provenance':{}}
+            raise setup_agentcontroller.AcquisitionError('Install Git and the .NET 9 SDK before retrying.')
+        with self.assertRaisesRegex(install.InstallError,'Install Git and the .NET 9 SDK'):
+            self.execute(with_agentcontroller=True,acquisition_provider=provider,runtime_check=lambda *_:runtime())
+
+    def test_joint_custom_directory_with_spaces_is_respected(self):
+        provider,calls=self.acquisition_fixture()
+        target=self.root/'custom controller files'
+        result=self.execute(with_agentcontroller=True,agentcontroller_dir=target,acquisition_provider=provider,runtime_check=lambda *_:runtime())
+        self.assertEqual(calls,[(target,True),(target,False)])
+        self.assertTrue(Path(result['agentcontroller']['acquisition']['command']).is_relative_to(target))
+        self.assertFalse((self.home/'tools/agentcontroller').exists())
+
+    def test_joint_profile_receipt_does_not_duplicate_provider_runtime_inventory(self):
+        provider,_=self.acquisition_fixture()
+        def inventory_provider(destination, *, dry_run=False):
+            result=provider(destination,dry_run=dry_run)
+            result['provenance']['files']={'public file': '0'*64}
+            return result
+        result=self.execute(with_agentcontroller=True,acquisition_provider=inventory_provider,runtime_check=lambda *_:runtime())
+        self.assertNotIn('files',result['agentcontroller']['acquisition']['provenance'])
+        self.assertNotIn('files',json.loads((self.home/'.ultra-hook/receipt.json').read_bytes())['agentcontrollerAcquisition']['provenance'])
+
     def test_hook_trust_summary_excludes_unrelated_hooks(self):
         hooks = trusted_hooks()
         hooks.append({'pluginId':'unrelated@plugin','enabled':True,'trustStatus':'untrusted'})
@@ -501,6 +638,18 @@ class OutputTests(unittest.TestCase):
         code,text,_=self.invoke(doctor,['--codex-home','synthetic profile with spaces','--cwd','synthetic workspace'],result)
         self.assertEqual(code,2)
         self.assertIn('Reuse any --codex-home, --codex-command and --cwd options',text)
+
+    def test_joint_json_remains_clean_and_human_output_reports_pending_steps(self):
+        result=self.result()
+        result['agentcontroller']['acquisition']={'status':'pending','command':None,'provenance':{},'next':'Open the downloaded DMG and review required permissions.'}
+        code,text,errors=self.invoke(install,['--with-agentcontroller','--json'],result)
+        self.assertEqual(code,0)
+        self.assertEqual(json.loads(text),result)
+        self.assertEqual(errors,'')
+        code,text,errors=self.invoke(install,['--with-agentcontroller'],result)
+        self.assertIn('combined installation is not complete',text)
+        self.assertIn('Open the downloaded DMG',text)
+        self.assertIn('Preparing optional AgentController setup',errors)
 
 
 if __name__ == '__main__':
