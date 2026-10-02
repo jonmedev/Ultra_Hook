@@ -1,0 +1,22 @@
+Ultra Hook
+https://github.com/jonmedev/Ultra_Hook
+
+The hook implementation derives from a Codex adaptation of Claude Agent System
+(CAS 7.37.0), maintained upstream at:
+https://github.com/Kasempiternal/claude-agent-system
+Copyright (c) 2024 Claude Agent System Contributors. MIT License.
+
+The secret-path recognizer derives in part from claude-code-hooks:
+https://github.com/karanb192/claude-code-hooks
+Copyright (c) 2026 Karan Bansal. MIT License.
+
+The MIT permission and warranty terms for these components are retained in LICENSE.
+
+K-stack informed the workflow comparison and consolidation:
+https://github.com/Kasempiternal/K-stack
+The public skill guidance was independently rewritten for native Codex workflows.
+
+AgentController is a separate dependency, not bundled in this source archive:
+https://github.com/Kasempiternal/agentcontroller
+Its own license and notices accompany any explicit source build. Installing Ultra
+Hook does not grant additional rights to dependencies or imply upstream endorsement.

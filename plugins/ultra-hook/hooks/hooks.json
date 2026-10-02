@@ -1,0 +1,12 @@
+{
+  "description": "Compact collaboration hints and literal sensitive-operation checks; native permissions remain authoritative.",
+  "hooks": {
+    "SessionStart": [{ "hooks": [{ "type": "command", "command": "node \"${PLUGIN_ROOT}/hooks/session-start.cjs\"", "timeout": 5 }] }],
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "node \"${PLUGIN_ROOT}/hooks/prompt-routing.cjs\"", "timeout": 5 }] }],
+    "PreToolUse": [
+      { "matcher": "Read|Edit|Write|Bash", "hooks": [{ "type": "command", "command": "node \"${PLUGIN_ROOT}/hooks/protect-secrets.js\"", "timeout": 5 }] },
+      { "matcher": "Bash", "hooks": [{ "type": "command", "command": "node \"${PLUGIN_ROOT}/hooks/sensitive-command-approval.cjs\"", "timeout": 5 }] },
+      { "matcher": "^(Agent|Task|Workflow|spawn_agent|collaboration\\.spawn_agent)$", "hooks": [{ "type": "command", "command": "node \"${PLUGIN_ROOT}/hooks/team-spawn.cjs\"", "timeout": 5 }] }
+    ]
+  }
+}

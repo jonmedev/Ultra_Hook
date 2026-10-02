@@ -1,0 +1,6 @@
+{
+  "name": "ultra-hook",
+  "version": "0.1.0",
+  "description": "Native Codex teamwork, compact lifecycle hints and AgentController UI validation.",
+  "hooks": "./hooks/hooks.json"
+}

@@ -1,0 +1,12 @@
+{
+  "name": "ultra-hook",
+  "interface": { "displayName": "Ultra Hook" },
+  "plugins": [
+    {
+      "name": "ultra-hook",
+      "source": { "source": "local", "path": "./plugins/ultra-hook" },
+      "policy": { "installation": "AVAILABLE", "authentication": "ON_USE" },
+      "category": "Developer Tools"
+    }
+  ]
+}
