@@ -60,7 +60,7 @@ const secretCommands = [
   "powershell -Command \"pwsh -Command 'Get-Item Env:API_KEY'\"",
 ];
 for (const command of secretCommands) {
-  test(`secret access asks: ${command}`, () => assert.equal(secrets.checkBashCommand(command).blocked, true));
+  test(`secret access detected: ${command}`, () => assert.equal(secrets.checkBashCommand(command).blocked, true));
 }
 
 const ordinaryCommands = [
@@ -173,7 +173,7 @@ const sensitiveCommands = [
   "pwsh -Command:Remove-Item file.txt",
 ];
 for (const command of sensitiveCommands) {
-  test(`sensitive command asks: ${command}`, () => assert.ok(approvals.inspectCommand(command)));
+  test(`sensitive command detected: ${command}`, () => assert.ok(approvals.inspectCommand(command)));
 }
 
 const normalOperations = [
@@ -207,7 +207,7 @@ test("approval hook validates event/tool and supports Codex command JSON", () =>
   assert.equal(approvals.check({ hook_event_name: "PreToolUse", tool_name: "Read", tool_input: { command: "rm sample" } }), null);
 });
 
-test("CLI responses and logs omit sensitive command text and parse-error fragments", () => {
+test("CLI responses omit sensitive text and hooks create no log files", () => {
   const temporaryHome = fs.mkdtempSync(path.join(os.tmpdir(), "ultra-safety-test-"));
   try {
     const marker = "synthetic-secret-marker-7d639";
@@ -215,23 +215,21 @@ test("CLI responses and logs omit sensitive command text and parse-error fragmen
       input: typeof payload === "string" ? payload : JSON.stringify(payload), encoding: "utf8",
       env: { ...process.env, USERPROFILE: temporaryHome, HOME: temporaryHome, CODEX_HOME: path.join(temporaryHome, '.codex') }, shell: false,
     });
-    const secretResult = run("protect-secrets.js", { tool_name: "exec_command", tool_input: { cmd: `gc .env; echo ${marker}` }, cwd: marker, session_id: marker });
+    const secretResult = run("protect-secrets.js", { hook_event_name: "PreToolUse", tool_name: "exec_command", tool_input: { cmd: `gc .env; echo ${marker}` }, cwd: marker, session_id: marker });
     assert.equal(secretResult.status, 0);
-    assert.equal(JSON.parse(secretResult.stdout).hookSpecificOutput.permissionDecision, "ask");
+    assert.equal(JSON.parse(secretResult.stdout).hookSpecificOutput.permissionDecision, "deny");
     const approvalResult = run("sensitive-command-approval.cjs", { hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: `git commit -m '${marker}'` } });
     assert.equal(approvalResult.status, 0);
-    assert.equal(JSON.parse(approvalResult.stdout).hookSpecificOutput.permissionDecision, "ask");
-    const patchResult = run("protect-secrets.js", { tool_name: "apply_patch", tool_input: { command: `*** Begin Patch\n*** Add File: .env\n+${marker}\n*** End Patch` } });
-    assert.equal(JSON.parse(patchResult.stdout).hookSpecificOutput.permissionDecision, "ask");
+    assert.match(JSON.parse(approvalResult.stdout).hookSpecificOutput.additionalContext, /native permissions/);
+    const patchResult = run("protect-secrets.js", { hook_event_name: "PreToolUse", tool_name: "apply_patch", tool_input: { command: `*** Begin Patch\n*** Add File: .env\n+${marker}\n*** End Patch` } });
+    assert.equal(JSON.parse(patchResult.stdout).hookSpecificOutput.permissionDecision, "deny");
     const malformed = run("protect-secrets.js", `{${marker}`);
-    assert.equal(malformed.stdout.trim(), "{}");
-    const providerResult = run("protect-secrets.js", { tool_name: "exec_command", tool_input: { cmd: `Get-Item Env:SECRET_${marker}` } });
-    assert.equal(JSON.parse(providerResult.stdout).hookSpecificOutput.permissionDecision, 'ask');
+    assert.equal(JSON.parse(malformed.stdout).hookSpecificOutput.permissionDecision, "deny");
+    const providerResult = run("protect-secrets.js", { hook_event_name: "PreToolUse", tool_name: "exec_command", tool_input: { cmd: `Get-Item Env:SECRET_${marker}` } });
+    assert.equal(JSON.parse(providerResult.stdout).hookSpecificOutput.permissionDecision, 'deny');
     const logDirectory = path.join(temporaryHome, ".codex", "hooks-logs");
-    const logs = fs.readdirSync(logDirectory).map(file => fs.readFileSync(path.join(logDirectory, file), "utf8")).join("\n");
-    for (const output of [secretResult.stdout, secretResult.stderr, approvalResult.stdout, approvalResult.stderr, patchResult.stdout, providerResult.stdout, providerResult.stderr, logs]) assert.ok(!output.includes(marker));
-    const entries = logs.trim().split("\n").filter(Boolean).map(line => JSON.parse(line));
-    for (const entry of entries) assert.ok(!["target", "command", "cwd", "session_id", "error"].some(key => key in entry));
+    assert.equal(fs.existsSync(logDirectory), false);
+    for (const output of [secretResult.stdout, secretResult.stderr, approvalResult.stdout, approvalResult.stderr, patchResult.stdout, providerResult.stdout, providerResult.stderr, malformed.stdout, malformed.stderr]) assert.ok(!output.includes(marker));
   } finally {
     const resolved = path.resolve(temporaryHome);
     assert.equal(path.dirname(resolved), path.resolve(os.tmpdir()));

@@ -32,6 +32,12 @@ trust them. Installation is not hook approval: the doctor reports pending trust,
 and no script writes trusted hashes or bypasses the native review. Start a new
 session to refresh the skills and tool catalog.
 
+Read the [security policy and limits](SECURITY.md). Version 0.1.1 fixes an unsupported
+hook response used in 0.1.0; update before relying on secret-access denials. For an
+owned 0.1.0 installation, uninstall it from its original directory, keep your
+backup/receipt, and install the new version from a separate extracted directory.
+Review source changes even when hook definitions have not changed.
+
 For an existing CAS installation, `--replace-cas` requests a reversible migration.
 CAS is disabled only after the replacement skills and trusted hooks are verified.
 If review is still pending, finish `/hooks` and rerun the installer with that flag.
@@ -68,6 +74,13 @@ Tool discovery alone is not a successful UI test. Use assertions and relevant
 screenshots on the actual target; if it is unreachable, report UI validation pending.
 For changes without a UI, test the real CLI/API/library instead.
 
+The doctor inspects hooks and skills with MCP servers disabled. To explicitly
+start the registered AgentController server and check its tool catalog, run:
+
+```sh
+python -B scripts/doctor.py --json --check-agentcontroller
+```
+
 ## Use
 
 - Invoke `$ultra-hook` for a substantial implementation, architecture, review or
@@ -79,11 +92,11 @@ For changes without a UI, test the real CLI/API/library instead.
 - Model choices come from the live collaboration catalog. Deeper reasoning or a
   stronger specialist requires evidence and must fit your authorization and caps.
 
-The hooks supply event-specific reminders and literal checks for sensitive file or
-shell operations. They are heuristics, not a sandbox or complete command interpreter.
-There is no telemetry or network request in the hook code. Secret checks record only
-classification IDs, tool names and timestamps locally, without command text or file
-contents. Native permission settings remain authoritative.
+The hooks supply event-specific reminders and deny recognized secret access and
+explicit destructive Git operations. Ordinary file/Git changes receive authorization
+reminders; these do not force a permission prompt. Checks are heuristics, not a
+sandbox or complete command interpreter. The hook code makes no network requests
+and writes no logs. Native permission settings remain authoritative.
 
 Command Code/DeepSeek is not bundled in this release: the inspected external CLI can
 automatically add local context without a verified per-call isolation control. This
@@ -105,7 +118,7 @@ credentials or user work.
 ```sh
 python -B scripts/validate.py
 python -B -m unittest discover -s tests
-node --test plugins/ultra-hook/hooks/tests/team-routing.test.cjs plugins/ultra-hook/hooks/tests/safety-windows.test.cjs
+node --test plugins/ultra-hook/hooks/tests/team-routing.test.cjs plugins/ultra-hook/hooks/tests/safety-windows.test.cjs plugins/ultra-hook/hooks/tests/security-boundaries.test.cjs
 python -B scripts/audit_release.py --git-staged --git-history --allow-github-noreply-identities
 python -B scripts/build_release.py --output ../ultra-hook-release
 ```
@@ -113,7 +126,9 @@ python -B scripts/build_release.py --output ../ultra-hook-release
 The audit rejects common credential patterns, personal paths/identifiers and local
 artifacts without echoing matched values. Packaging copies only reviewed source
 directories into a fresh staging tree, audits that tree and emits a deterministic
-ZIP plus SHA-256 checksum. Review findings before publishing; pattern scans cannot
+ZIP plus SHA-256 checksum. Release CI signs build provenance; the
+[security policy](SECURITY.md#verify-a-download) shows how to verify it against the
+repository, release workflow and version tag. Review findings before publishing; pattern scans cannot
 prove the absence of every possible private value. Use a deliberate public GitHub
 noreply identity for release commits, never a private email address.
 

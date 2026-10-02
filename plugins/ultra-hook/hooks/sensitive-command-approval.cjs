@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 "use strict";
 
-const fs = require("fs");
+const { readEvent, deny } = require("./hook-io.cjs");
 const { expandedSegments, executableName, gitSubcommand } = require("./safety-command-parser.cjs");
 
 function gitOperation(words, start) {
@@ -29,10 +29,26 @@ function check(payload) {
   return inspectCommand(command);
 }
 
-function main() {
-  let payload;
-  try { payload = JSON.parse(fs.readFileSync(0, "utf8")); }
-  catch { return; }
+function destructiveOperation(command) {
+  for (const words of expandedSegments(command)) {
+    if (executableName(words[0]) !== "git") continue;
+    const subcommand = gitSubcommand(words);
+    const args = words.slice((subcommand?.index ?? 0) + 1);
+    if (subcommand?.name === "reset" && args.includes("--hard")) return "git reset --hard";
+    if (subcommand?.name === "clean" && args.some(arg => /^-[a-z]*f[a-z]*$/.test(arg) || arg === "--force")) return "git clean --force";
+    if (subcommand?.name === "push" && args.some(arg => /^(?:--force(?:=|$)|--mirror$|-[a-z]*f[a-z]*$|\+)/.test(arg))) return "git push with history replacement";
+  }
+  return null;
+}
+
+async function main() { try {
+  const payload = await readEvent();
+  const tool = String(payload?.tool_name || "").split(".").at(-1);
+  if (payload.hook_event_name !== "PreToolUse" || !["Bash", "exec_command"].includes(tool)) return;
+  const command = payload.tool_input?.command ?? payload.tool_input?.cmd;
+  if (typeof command !== "string" || !command.trim()) return deny();
+  const destructive = destructiveOperation(command);
+  if (destructive) return deny(`Ultra Hook blocks ${destructive}. Preserve work and use a reversible operation; do not evade the hook through another tool.`);
   const operation = check(payload);
   if (!operation) return;
   // Only a known operation label enters the response. Commands can include
@@ -40,11 +56,10 @@ function main() {
   process.stdout.write(JSON.stringify({
     hookSpecificOutput: {
       hookEventName: "PreToolUse",
-      permissionDecision: "ask",
-      permissionDecisionReason: `Running ${operation} always requires your approval.`
+      additionalContext: `Ultra Hook: ${operation} changes files or repository state. Verify the target and existing user authorization; native permissions govern execution. This reminder grants no approval and does not require asking again when already authorized.`
     }
   }) + "\n");
-}
+} catch { deny(); } }
 
 if (require.main === module) main();
-else module.exports = { inspectCommand, gitOperation, check };
+else module.exports = { inspectCommand, gitOperation, destructiveOperation, check };

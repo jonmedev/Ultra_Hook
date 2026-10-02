@@ -12,7 +12,11 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import stat
 import sys
+import tempfile
+import threading
+import time
 import tomllib
 
 PLUGIN = 'ultra-hook@ultra-hook'
@@ -20,6 +24,9 @@ MARKETPLACE = 'ultra-hook'
 CAS = 'cas@claude-agent-system'
 SERVER = 'agentcontroller'
 REPO = Path(__file__).resolve().parents[1]
+MAX_CONFIG_BYTES = 8 * 1024 * 1024
+MAX_RECEIPT_BYTES = 256 * 1024
+_UNSET = object()
 
 
 class InstallError(RuntimeError):
@@ -27,25 +34,164 @@ class InstallError(RuntimeError):
 
 
 def codex_home(value=None):
-    return Path(value or os.environ.get('CODEX_HOME') or Path.home() / '.codex').expanduser().resolve()
+    home = Path(os.path.abspath(Path(value or os.environ.get('CODEX_HOME') or Path.home() / '.codex').expanduser()))
+    guard_path(home)
+    if home == Path(home.anchor):
+        raise InstallError('Codex profile cannot be a filesystem root.')
+    return home
+
+
+def guard_path(path, *, regular=False):
+    """Reject existing links/reparse points and multiply-linked private files.
+
+    Rechecked at operation boundaries; this is not a sandbox against a concurrent
+    attacker with the same filesystem permissions.
+    """
+    path = Path(os.path.abspath(path))
+    for candidate in reversed((path, *path.parents)):
+        try:
+            info = candidate.lstat()
+        except FileNotFoundError:
+            continue
+        if stat.S_ISLNK(info.st_mode) or getattr(info, 'st_file_attributes', 0) & 0x400:
+            raise InstallError('Linked/reparse filesystem paths are not supported for installer data.')
+        if candidate == path and stat.S_ISREG(info.st_mode) and info.st_nlink != 1:
+            raise InstallError('Hardlinked private files are not supported for installer data.')
+        if candidate == path and regular and not stat.S_ISREG(info.st_mode):
+            raise InstallError('Expected a regular installer data file.')
+    return path
+
+
+def private_bytes(path, *, limit=MAX_CONFIG_BYTES):
+    path = guard_path(path, regular=True)
+    try:
+        with path.open('rb') as handle:
+            info = os.fstat(handle.fileno())
+            if info.st_nlink != 1 or info.st_size > limit:
+                raise InstallError('Private installer data exceeds limits or is hardlinked.')
+            data = handle.read(limit + 1)
+    except FileNotFoundError:
+        return None
+    if len(data) > limit:
+        raise InstallError('Private installer data exceeds its size limit.')
+    guard_path(path, regular=True)
+    return data
+
+
+def ensure_directory(path):
+    guard_path(path)
+    path.mkdir(parents=True, exist_ok=True, mode=0o700)
+    guard_path(path)
+    if not path.is_dir():
+        raise InstallError('Installer directory is not a directory.')
+
+
+def stop_process(process):
+    """Stop the owned child and, where supported, its process tree."""
+    if process.poll() is not None:
+        return
+    if os.name == 'nt':
+        killer = Path(os.environ.get('SystemRoot', r'C:\Windows')) / 'System32/taskkill.exe'
+        if killer.is_file():
+            try:
+                subprocess.run([str(killer), '/PID', str(process.pid), '/T', '/F'], shell=False,
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
+            except (OSError, subprocess.TimeoutExpired):
+                pass
+    else:
+        try:
+            import signal
+            os.killpg(process.pid, signal.SIGKILL)
+        except (OSError, ProcessLookupError):
+            pass
+    if process.poll() is None:
+        process.kill()
+    process.wait(timeout=5)
+
+
+def run_bounded(command, *, timeout=90, env=None, cwd=None, max_output=4 * 1024 * 1024):
+    """Collect limited stdout/stderr without unbounded communicate buffers."""
+    process = subprocess.Popen(command, shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                               env=env, cwd=cwd, start_new_session=os.name != 'nt',
+                               creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+    buffers = [bytearray(), bytearray()]
+    total = 0
+    overflow = threading.Event()
+    mutex = threading.Lock()
+    def read(stream, buffer):
+        nonlocal total
+        try:
+            while True:
+                chunk = stream.read(4096)
+                if not chunk:
+                    break
+                with mutex:
+                    total += len(chunk)
+                    if total > max_output:
+                        overflow.set()
+                        break
+                    buffer.extend(chunk)
+        except (OSError, ValueError):
+            overflow.set()
+    threads = [threading.Thread(target=read, args=(stream, buffer), daemon=True)
+               for stream, buffer in zip((process.stdout, process.stderr), buffers)]
+    for thread in threads:
+        thread.start()
+    deadline = time.monotonic() + timeout
+    try:
+        while process.poll() is None or any(thread.is_alive() for thread in threads):
+            if overflow.is_set():
+                raise InstallError('Child process output exceeded its limit; raw output withheld.')
+            if time.monotonic() >= deadline:
+                raise InstallError('Child process timed out; raw output withheld.')
+            overflow.wait(0.02)
+        if overflow.is_set():
+            raise InstallError('Child process output exceeded its limit; raw output withheld.')
+        return subprocess.CompletedProcess(command, process.returncode,
+                    buffers[0].decode('utf-8', errors='replace'), buffers[1].decode('utf-8', errors='replace'))
+    finally:
+        stop_process(process)
+        for stream, thread in zip((process.stdout, process.stderr), threads):
+            if not thread.is_alive():
+                stream.close()
 
 
 def load_config(home):
     path = home / 'config.toml'
-    return tomllib.loads(path.read_text(encoding='utf-8-sig')) if path.exists() else {}
+    data = private_bytes(path)
+    config = tomllib.loads(data.decode('utf-8-sig')) if data is not None else {}
+    for key in ('plugins', 'mcp_servers', 'plugin_marketplaces', 'marketplaces'):
+        if key in config and (not isinstance(config[key], dict)
+                              or any(not isinstance(value, dict) for value in config[key].values())):
+            raise InstallError('Unsupported configuration structure; private data withheld.')
+    return config
 
 
-def write_private(path, data):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temp = path.with_name(path.name + '.ultra-hook-tmp')
-    with temp.open('xb') as handle:
-        handle.write(data)
+def write_private(path, data, *, expected=_UNSET):
+    path = guard_path(path, regular=True)
+    ensure_directory(path.parent)
+    descriptor, name = tempfile.mkstemp(prefix='.ultra-hook-', suffix='.tmp', dir=path.parent)
+    temp = Path(name)
+    identity = os.fstat(descriptor)
     try:
-        temp.chmod(0o600)
+        with os.fdopen(descriptor, 'wb') as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        guard_path(path, regular=True)
+        if expected is not _UNSET and private_bytes(path) != expected:
+            raise InstallError('Installer data changed concurrently; refusing to overwrite it.')
+        now = temp.lstat()
+        if (now.st_dev, now.st_ino) != (identity.st_dev, identity.st_ino) or now.st_nlink != 1:
+            raise InstallError('Temporary installer data was replaced; refusing to write.')
         os.replace(temp, path)
     finally:
-        if temp.exists():
-            temp.unlink()
+        try:
+            now = temp.lstat()
+            if (now.st_dev, now.st_ino) == (identity.st_dev, identity.st_ino):
+                temp.unlink()
+        except FileNotFoundError:
+            pass
 
 
 def command_prefix(value=None):
@@ -72,11 +218,9 @@ class CLI:
         self.env['CODEX_HOME'] = str(home)
         self.env['DO_NOT_TRACK'] = '1'
 
-    def run(self, args, *, json_output=False, timeout=90):
+    def run(self, args, *, json_output=False, timeout=90, cwd=REPO):
         try:
-            result = subprocess.run(self.prefix + list(args), shell=False, capture_output=True,
-                                    text=True, encoding='utf-8', errors='replace',
-                                    timeout=timeout, env=self.env, cwd=REPO)
+            result = run_bounded(self.prefix + list(args), timeout=timeout, env=self.env, cwd=cwd)
         except (OSError, subprocess.TimeoutExpired) as exc:
             raise InstallError('Codex CLI failed or timed out; raw output withheld.') from exc
         if result.returncode:
@@ -95,7 +239,7 @@ def prerequisites(cli):
     node = shutil.which('node')
     if not node:
         raise InstallError('Node.js 18 or newer is required for plugin hooks.')
-    result = subprocess.run([node, '--version'], shell=False, capture_output=True, text=True, timeout=15)
+    result = run_bounded([node, '--version'], timeout=15, max_output=4096)
     match = re.match(r'v(\d+)\.', result.stdout.strip())
     if result.returncode or not match or int(match[1]) < 18:
         raise InstallError('Node.js 18 or newer is required.')
@@ -122,11 +266,19 @@ def check_package(repo):
 
 def plugin_catalog(cli):
     document = cli.run(['plugin', 'list', '--marketplace', MARKETPLACE, '--json'], json_output=True)
+    if (not isinstance(document, dict) or not isinstance(document.get('installed', []), list)
+            or any(not isinstance(entry, dict) or not isinstance(entry.get('pluginId'), str)
+                   for entry in document.get('installed', []))):
+        raise InstallError('Invalid native plugin catalog; raw data withheld.')
     return {entry.get('pluginId'): entry for entry in document.get('installed', [])}
 
 
 def marketplaces(cli):
     document = cli.run(['plugin', 'marketplace', 'list', '--json'], json_output=True)
+    if (not isinstance(document, dict) or not isinstance(document.get('marketplaces', []), list)
+            or any(not isinstance(entry, dict) or not isinstance(entry.get('name'), str)
+                   for entry in document.get('marketplaces', []))):
+        raise InstallError('Invalid native marketplace catalog; raw data withheld.')
     return {entry.get('name'): entry for entry in document.get('marketplaces', [])}
 
 
@@ -175,7 +327,10 @@ def protected(config, *, replace_cas=False, add_mcp=False):
 def set_plugin_enabled(home, identity, enabled):
     """Change one documented plugin table, preserving every other byte."""
     path = home / 'config.toml'
-    original = path.read_text(encoding='utf-8-sig')
+    original_bytes = private_bytes(path)
+    if original_bytes is None:
+        raise InstallError('Config disappeared; refusing to edit it.')
+    original = original_bytes.decode('utf-8-sig')
     config = tomllib.loads(original)
     if identity not in config.get('plugins', {}):
         raise InstallError('Expected plugin registration is absent; refusing config surgery.')
@@ -196,30 +351,45 @@ def set_plugin_enabled(home, identity, enabled):
     expected['plugins'][identity]['enabled'] = enabled
     if tomllib.loads(updated) != expected:
         raise InstallError('Config edit changed unrelated values; refusing to write.')
-    write_private(path, updated.encode('utf-8'))
+    write_private(path, updated.encode('utf-8'), expected=original_bytes)
 
 
 @contextmanager
 def installation_lock(home):
+    guard_path(home)
     state = home / '.ultra-hook'
-    state.mkdir(parents=True, exist_ok=True)
+    ensure_directory(state)
     lock = state / 'install.lock'
+    guard_path(lock, regular=True)
     try:
-        with lock.open('x', encoding='utf-8') as handle:
-            handle.write(str(os.getpid()))
+        descriptor = os.open(lock, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     except FileExistsError as exc:
         raise InstallError('An installer lock exists. Verify the previous process has ended before removing that lock.') from exc
+    with os.fdopen(descriptor, 'w', encoding='utf-8') as handle:
+        identity = os.fstat(handle.fileno())
+        handle.write(str(os.getpid()))
     try:
         yield state
     finally:
-        lock.unlink(missing_ok=True)
+        guard_path(lock, regular=True)
+        try:
+            current = lock.lstat()
+            if (current.st_dev, current.st_ino) == (identity.st_dev, identity.st_ino):
+                lock.unlink()
+        except FileNotFoundError:
+            pass
 
 
 def install(repo, home, cli, *, dry_run=False, agentcontroller_command=None, replace_cas=False, runtime_check=None):
+    home = guard_path(home)
+    guard_path(home / '.ultra-hook')
     repo = Path(repo).resolve()
     version = check_package(repo)
     requirements = prerequisites(cli)
+    initial_bytes = private_bytes(home / 'config.toml')
     initial = load_config(home)
+    if private_bytes(home / 'config.toml') != initial_bytes:
+        raise InstallError('Config changed during planning; rerun.')
     controller = controller_registration(initial, agentcontroller_command)
     known_markets = marketplaces(cli)
     market = known_markets.get(MARKETPLACE)
@@ -246,13 +416,25 @@ def install(repo, home, cli, *, dry_run=False, agentcontroller_command=None, rep
     runtime_check = runtime_check or runtime_metadata
     with installation_lock(home) as state:
         config_file = home / 'config.toml'
-        baseline = config_file.read_bytes() if config_file.exists() else None
+        baseline = private_bytes(config_file)
+        if baseline != initial_bytes:
+            raise InstallError('Config changed since planning; rerun without overwriting it.')
+        locked_market = marketplaces(cli).get(MARKETPLACE)
+        locked_installed = plugin_catalog(cli).get(PLUGIN) if locked_market else None
+        if locked_market != market or locked_installed != installed:
+            raise InstallError('Plugin registrations changed since planning; rerun.')
         transaction = state / 'backups' / datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
-        transaction.mkdir(parents=True)
+        ensure_directory(transaction)
         if baseline is not None:
             write_private(transaction / 'config.toml', baseline)
         previous_receipt = state / 'receipt.json'
-        old_receipt = json.loads(previous_receipt.read_text()) if previous_receipt.exists() else {}
+        receipt_bytes = private_bytes(previous_receipt, limit=MAX_RECEIPT_BYTES)
+        old_receipt = json.loads(receipt_bytes) if receipt_bytes is not None else {}
+        if not isinstance(old_receipt, dict):
+            raise InstallError('Invalid installation receipt; private data withheld.')
+        if old_receipt and (old_receipt.get('plugin') != PLUGIN or not old_receipt.get('repo')
+                            or not same_path(old_receipt['repo'], repo)):
+            raise InstallError('Existing installation receipt belongs to a different source; refusing to reuse it.')
         owned = {'plugin': bool(old_receipt.get('createdPlugin')) or not bool(installed),
                  'marketplace': bool(old_receipt.get('createdMarketplace')) or not bool(market),
                  'mcp': bool(old_receipt.get('createdMcp')) or controller['add']}
@@ -260,26 +442,31 @@ def install(repo, home, cli, *, dry_run=False, agentcontroller_command=None, rep
         expected_bytes = baseline
         try:
             for action in actions:
-                cli.run(action, json_output=action[-1] == '--json')
+                if private_bytes(config_file) != expected_bytes:
+                    raise InstallError('Config changed concurrently before a CLI mutation; refusing to continue.')
+                # A CLI may commit before returning failure/timeout. Record the
+                # attempt first; rollback verifies current ownership separately.
                 completed.append(action)
-                expected_bytes = config_file.read_bytes() if config_file.exists() else None
+                cli.run(action, json_output=action[-1] == '--json')
+                expected_bytes = private_bytes(config_file)
             effective = plugin_catalog(cli).get(PLUGIN)
             if not effective or not effective.get('enabled') or effective.get('version') != version:
                 raise InstallError('Ultra Hook was not verified installed/enabled at the requested version.')
             if protected(load_config(home), add_mcp=controller['add']) != protected(initial, add_mcp=controller['add']):
                 raise InstallError('The CLI changed an unrelated preference; rolling back this transaction.')
             try:
-                metadata = runtime_check(cli, repo)
+                metadata = (runtime_check(cli, repo, check_agentcontroller=True)
+                            if agentcontroller_command and runtime_check is runtime_metadata else runtime_check(cli, repo))
             except (InstallError, OSError):
                 metadata = {'trustedHookCount': 0, 'skillCount': 0, 'hooksReady': False,
                             'trustPending': True, 'diagnostic': 'Runtime metadata unavailable; inspect Codex /hooks before migration.'}
             migration_pending = bool(replace_cas and cas_enabled)
             cas_disabled = bool(old_receipt.get('disabledCas'))
             if (replace_cas and cas_enabled and metadata.get('hookCount') == 5
-                    and metadata.get('trustedHookCount') == 5 and metadata.get('skillCount') == 2
+                    and metadata.get('trustedHookCount') == 5 and metadata.get('skillCount') == 2 and metadata.get('skillsReady')
                     and metadata.get('hooksReady')):
                 set_plugin_enabled(home, CAS, False)
-                expected_bytes = config_file.read_bytes()
+                expected_bytes = private_bytes(config_file)
                 migration_pending = False
                 cas_disabled = True
             if protected(load_config(home), replace_cas=cas_disabled, add_mcp=controller['add']) != protected(initial, replace_cas=cas_disabled, add_mcp=controller['add']):
@@ -291,7 +478,7 @@ def install(repo, home, cli, *, dry_run=False, agentcontroller_command=None, rep
                                           if controller['add'] else old_receipt.get('mcpFingerprint')),
                        'disabledCas': cas_disabled, 'migrationPending': migration_pending,
                        'runtime': metadata}
-            write_private(previous_receipt, json.dumps(receipt, indent=2).encode('utf-8'))
+            write_private(previous_receipt, json.dumps(receipt, indent=2).encode('utf-8'), expected=receipt_bytes)
             return {'status': 'installed', **plan, 'runtime': metadata, 'migrationPending': migration_pending,
                     'backup': str(transaction)}
         except Exception as exc:
@@ -299,24 +486,45 @@ def install(repo, home, cli, *, dry_run=False, agentcontroller_command=None, rep
             errors = []
             for action in reversed(completed):
                 inverse = None
-                if action[:2] == ['mcp', 'add']:
-                    inverse = ['mcp', 'remove', SERVER]
-                elif action[:2] == ['plugin', 'add'] and not installed:
-                    inverse = ['plugin', 'remove', PLUGIN, '--json']
-                elif action[:3] == ['plugin', 'marketplace', 'add'] and not market:
-                    inverse = ['plugin', 'marketplace', 'remove', MARKETPLACE, '--json']
+                try:
+                    guard_path(home)
+                    private_bytes(config_file)
+                    if action[:2] == ['mcp', 'add']:
+                        current_server = load_config(home).get('mcp_servers', {}).get(SERVER)
+                        if current_server and (current_server.get('command') == controller['command']
+                                and not current_server.get('args') and not current_server.get('url')
+                                and not (set(current_server) - {'command', 'args', 'enabled'})):
+                            inverse = ['mcp', 'remove', SERVER]
+                        elif current_server:
+                            errors.append('MCP registration changed; retained for review')
+                    elif action[0] == 'plugin':
+                        current_market = marketplaces(cli).get(MARKETPLACE)
+                        source_matches = current_market and same_path(current_market.get('root', ''), repo)
+                        if action[:2] == ['plugin', 'add'] and not installed:
+                            current_plugin = plugin_catalog(cli).get(PLUGIN) if current_market else None
+                            if source_matches and current_plugin and current_plugin.get('version') == version:
+                                inverse = ['plugin', 'remove', PLUGIN, '--json']
+                            elif current_plugin:
+                                errors.append('plugin ownership changed; retained for review')
+                        elif action[:3] == ['plugin', 'marketplace', 'add'] and not market:
+                            if source_matches:
+                                inverse = ['plugin', 'marketplace', 'remove', MARKETPLACE, '--json']
+                            elif current_market:
+                                errors.append('marketplace source changed; retained for review')
+                except (InstallError, OSError, ValueError, TypeError):
+                    errors.append('rollback ownership could not be verified; retained for review')
                 if inverse:
                     try:
                         cli.run(inverse, json_output=inverse[-1] == '--json')
-                        expected_bytes = config_file.read_bytes() if config_file.exists() else None
+                        expected_bytes = private_bytes(config_file)
                     except InstallError:
                         errors.append('registration rollback incomplete')
-            current_bytes = config_file.read_bytes() if config_file.exists() else None
-            unchanged_outside_transaction = (protected(load_config(home), replace_cas=True, add_mcp=controller['add'])
-                                             == protected(initial, replace_cas=True, add_mcp=controller['add']))
-            if current_bytes == expected_bytes and unchanged_outside_transaction:
+            current_bytes = private_bytes(config_file)
+            unchanged_outside_transaction = (protected(load_config(home), replace_cas=locals().get('cas_disabled', False), add_mcp=controller['add'])
+                                             == protected(initial, replace_cas=locals().get('cas_disabled', False), add_mcp=controller['add']))
+            if not errors and current_bytes == expected_bytes and unchanged_outside_transaction:
                 if baseline is not None:
-                    write_private(config_file, baseline)
+                    write_private(config_file, baseline, expected=current_bytes)
                 elif config_file.exists():
                     config_file.unlink()
             else:
@@ -343,8 +551,11 @@ def main():
                          agentcontroller_command=args.agentcontroller_command, replace_cas=args.replace_cas)
         print(json.dumps(result, indent=2))
         return 0
-    except (InstallError, OSError, ValueError, tomllib.TOMLDecodeError) as exc:
+    except InstallError as exc:
         print(json.dumps({'status': 'error', 'message': str(exc)}), file=sys.stderr)
+        return 1
+    except (OSError, ValueError, TypeError, KeyError, AttributeError):
+        print(json.dumps({'status': 'error', 'message': 'Installation failed; private diagnostics withheld.'}), file=sys.stderr)
         return 1
 
 

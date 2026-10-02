@@ -6,6 +6,9 @@ on:
   workflow_call:
 permissions:
   contents: read
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   portable-checks:
     strategy:
@@ -13,6 +16,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
     env:
       PYTHONDONTWRITEBYTECODE: '1'
     steps:
@@ -29,5 +33,5 @@ jobs:
           package-manager-cache: false
       - run: python -B scripts/validate.py
       - run: python -B -m unittest discover -s tests
-      - run: node --test plugins/ultra-hook/hooks/tests/team-routing.test.cjs plugins/ultra-hook/hooks/tests/safety-windows.test.cjs
+      - run: node --test plugins/ultra-hook/hooks/tests/team-routing.test.cjs plugins/ultra-hook/hooks/tests/safety-windows.test.cjs plugins/ultra-hook/hooks/tests/security-boundaries.test.cjs
       - run: python -B scripts/audit_release.py --git-staged --git-history --allow-github-noreply-identities

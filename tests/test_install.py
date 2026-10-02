@@ -77,7 +77,19 @@ class FakeCLI:
 
 def runtime(ready=False):
     return {'hookCount': 5, 'trustedHookCount': 5 if ready else 0, 'skillCount': 2,
-            'hooksReady': ready, 'trustPending': not ready}
+            'hooksReady': ready, 'trustPending': not ready, 'skillsReady': True}
+
+
+def trusted_hooks(plugin_root=None):
+    plugin_root = plugin_root or install.REPO / 'plugins/ultra-hook'
+    source = plugin_root / 'hooks/hooks.json'
+    definition = json.loads(source.read_text(encoding='utf-8'))
+    return [{'pluginId':install.PLUGIN, 'enabled':True, 'trustStatus':'trusted',
+             'eventName':event[0].lower()+event[1:], 'handlerType':handler['type'],
+             'command':handler['command'].replace('${PLUGIN_ROOT}',str(plugin_root)),
+             'matcher':group.get('matcher'), 'timeoutSec':handler['timeout'],
+             'source':'plugin', 'sourcePath':str(source)}
+            for event,groups in definition['hooks'].items() for group in groups for handler in group['hooks']]
 
 
 class InstallerTests(unittest.TestCase):
@@ -230,10 +242,11 @@ class InstallerTests(unittest.TestCase):
         self.assertFalse(self.cli.calls)
 
     def test_hook_trust_summary_excludes_unrelated_hooks(self):
-        hooks = [{'pluginId': install.PLUGIN, 'enabled': True, 'trustStatus': 'trusted'} for _ in range(5)]
+        hooks = trusted_hooks()
         hooks.append({'pluginId':'unrelated@plugin','enabled':True,'trustStatus':'untrusted'})
         report = doctor.summarize_runtime({'data':[{'hooks':hooks}]}, {'data':[{'skills':
-            [{'name':'ultra-hook:ultra-hook'},{'name':'ultra-hook:agentcontroller'},{'name':'cas:review'}]}]})
+            [{'name':'ultra-hook:ultra-hook'},{'name':'ultra-hook:agentcontroller'},{'name':'cas:review'}]}]},
+            plugin_root=install.REPO / 'plugins/ultra-hook')
         self.assertTrue(report['hooksReady'])
         self.assertEqual(report['trustedHookCount'], 5)
         self.assertEqual(report['skillCount'], 2)
@@ -273,7 +286,10 @@ class InstallerTests(unittest.TestCase):
         calls = []
         def simulated(command, **kwargs):
             calls.append(command)
-            self.assertFalse(kwargs['shell'])
+            self.assertIn('timeout', kwargs)
+            self.assertNotIn('SYNTHETIC_API_TOKEN', kwargs['env'])
+            self.assertNotIn('NUGET_CREDENTIALPROVIDERS_PATH', kwargs['env'])
+            self.assertTrue(kwargs['env']['USERPROFILE'].startswith(str(target)))
             output = ''
             if '--list-sdks' in command:
                 output = '9.0.300 [synthetic SDK]\n'
@@ -289,7 +305,8 @@ class InstallerTests(unittest.TestCase):
                 (target / 'bin/agentcontroller-windows.exe').write_bytes(b'synthetic build output')
             return setup_agentcontroller.subprocess.CompletedProcess(command, 0, output, '')
         with mock.patch.object(setup_agentcontroller.shutil, 'which', return_value='git'), \
-             mock.patch.object(setup_agentcontroller.subprocess, 'run', side_effect=simulated):
+             mock.patch.dict(setup_agentcontroller.os.environ, {'SYNTHETIC_API_TOKEN':'fixture-secret','NUGET_CREDENTIALPROVIDERS_PATH':'fixture-provider'}), \
+             mock.patch.object(setup_agentcontroller, 'run_bounded', side_effect=simulated):
             result = setup_agentcontroller.build(target, enabled=True, dotnet_command=dotnet)
         self.assertEqual(result['status'], 'built')
         self.assertEqual((target / 'NOTICE.AgentController').read_text(), 'synthetic upstream notice')

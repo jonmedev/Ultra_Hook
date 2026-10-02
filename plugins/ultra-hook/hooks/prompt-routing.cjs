@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 "use strict";
 // A scoped reminder, never a grant of delegation or model-switching authority.
-const fs = require("node:fs");
+const { readEvent } = require("./hook-io.cjs");
 const { emitContext, contextFor } = require("./model-routing.cjs");
 
 function promptKind(prompt) {
@@ -17,12 +17,11 @@ function promptKind(prompt) {
 }
 
 module.exports = { promptKind };
-if (require.main === module) {
-try {
-  const input = JSON.parse(fs.readFileSync(0, "utf8"));
+async function main() { try {
+  const input = await readEvent();
   const kind = promptKind(input.prompt);
   if (input.hook_event_name === "UserPromptSubmit" && kind) {
     emitContext("UserPromptSubmit", contextFor("UserPromptSubmit", kind));
   }
-} catch { /* Advisory only; malformed input must not crash or authorize anything. */ }
-}
+} catch { /* Advisory only; malformed input must not crash or authorize anything. */ } }
+if (require.main === module) main();

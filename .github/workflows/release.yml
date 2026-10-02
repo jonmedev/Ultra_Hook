@@ -4,14 +4,20 @@ on:
     tags: ['v*']
 permissions:
   contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
   verify:
     uses: ./.github/workflows/ci.yml
   release:
     needs: verify
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write
+      id-token: write
+      attestations: write
     env:
       PYTHONDONTWRITEBYTECODE: '1'
       RELEASE_TAG: ${{ github.ref_name }}
@@ -25,10 +31,15 @@ jobs:
           python-version: '3.11'
       - name: Check tag and privacy
         run: |
-          python -B -c "import json,os; from pathlib import Path; v=json.loads(Path('plugins/ultra-hook/plugin.json').read_text())['version']; assert os.environ['RELEASE_TAG']=='v'+v, 'Tag and manifest version differ'"
+          python -B -c "import json,os,sys; from pathlib import Path; v=json.loads(Path('plugins/ultra-hook/plugin.json').read_text())['version']; sys.exit(0 if os.environ['RELEASE_TAG']=='v'+v else 'Tag and manifest version differ')"
           python -B scripts/audit_release.py --git-staged --git-history --allow-github-noreply-identities
       - name: Build audited artifact
         run: python -B scripts/build_release.py --output "$RUNNER_TEMP/ultra-hook-release"
+      - name: Attest release provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: ${{ runner.temp }}/ultra-hook-release/*.zip
+          create-storage-record: false
       - name: Publish tag artifacts
         env:
           GH_TOKEN: ${{ github.token }}

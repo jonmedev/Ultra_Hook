@@ -121,13 +121,15 @@ function unwrapWords(words) {
 
 // Return literal commands inside common wrappers and find -exec expressions.
 // Variables, aliases defined by scripts and generated command text are not evaluated.
-function expandedSegments(source, depth = 0) {
-  if (depth > 8) return [];
+function expandedSegments(source, depth = 0, budget = { characters: 262144, segments: 4096 }) {
+  if (typeof source !== "string") return [];
+  if (depth > 8 || source.length > 65536 || (budget.characters -= source.length) < 0) throw new RangeError("Command inspection limit");
   const result = [];
   for (const original of commandSegments(source)) {
+    if (--budget.segments < 0) throw new RangeError("Command inspection limit");
     const words = unwrapWords(original);
     result.push(words);
-    for (const nested of nestedCommands(words, 0)) result.push(...expandedSegments(nested, depth + 1));
+    for (const nested of nestedCommands(words, 0)) result.push(...expandedSegments(nested, depth + 1, budget));
     if (executableName(words[0]) === "find") {
       for (let index = 1; index + 1 < words.length; index += 1) {
         if (["-exec", "-execdir"].includes(words[index])) result.push(words.slice(index + 1));
@@ -135,7 +137,7 @@ function expandedSegments(source, depth = 0) {
     }
   }
   for (const pattern of [/\$\(([^()]*)\)/gs, /`([^`]*)`/gs]) {
-    for (const match of source.matchAll(pattern)) result.push(...expandedSegments(match[1], depth + 1));
+    for (const match of source.matchAll(pattern)) result.push(...expandedSegments(match[1], depth + 1, budget));
   }
   return result;
 }

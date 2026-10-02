@@ -20,6 +20,15 @@
 6. Once publication is authorized, push the reviewed commits and an annotated
    version tag such as `v0.1.0`. The tag workflow reruns CI and verifies that the tag
    matches the manifest before creating the GitHub release with ZIP and checksum.
+   It also signs build provenance. Download the published archive, verify its
+   attestation against the expected repository/workflow/tag, compare its bytes with
+   the reviewed local build and repeat installation in a fresh disposable profile.
+
+The release builder uses an explicit file inventory: update it deliberately when
+adding distributable files. Keep SECURITY.md current with actual controls and
+limitations. Hook output must use supported Codex decisions; synthetic JSON tests
+alone cannot establish host enforcement. No current PreToolUse hook may return
+the unsupported `ask` decision.
 
 Never rewrite a public history or force-push as an automatic response to a leak.
 Stop publication, assess exposure and handle any required revocation separately.

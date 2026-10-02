@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Fail closed on private data and local artifacts before publication (stdlib only)."""
+"""Check publication inputs for known private-data patterns and local artifacts."""
 from __future__ import annotations
 
 import argparse
+from itertools import islice
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -10,12 +11,18 @@ import re
 import stat
 import subprocess
 import sys
+import threading
+import time
 
 MAX_BYTES = 2 * 1024 * 1024
+MAX_ENTRIES = 10000
+MAX_DEPTH = 64
+MAX_GIT_BYTES = 16 * 1024 * 1024
+GIT_SCAN_SECONDS = 120
 BINARY_SUFFIXES = {'.exe', '.dll', '.pdb', '.so', '.dylib', '.pyc', '.zip', '.7z',
                    '.tar', '.gz', '.sqlite', '.db', '.dmp', '.png', '.jpg', '.jpeg',
                    '.gif', '.mp4', '.pdf', '.docx', '.xlsx', '.pptx'}
-LOCAL_PARTS = {'.codex', '.claude', '.commandcode', '.agentcontroller', '.cas',
+LOCAL_PARTS = {'.git', '.codex', '.claude', '.commandcode', '.agentcontroller', '.cas',
                '__pycache__', 'node_modules', '.pytest_cache', '.venv', 'venv',
                'hooks-logs', 'logs', 'cache', 'caches', 'publish', 'dist', 'bin', 'obj'}
 LOCAL_NAMES = {'installation.json', 'models_cache.json', 'credentials.json',
@@ -29,10 +36,143 @@ PATTERNS = {
     'secret-bearer': re.compile(r'(?i)\bBearer\s+[A-Za-z0-9._~+/-]{24,}'),
     'credential-url': re.compile(r'(?i)\bhttps?://[^\s/:@]+:[^\s/@]{8,}@'),
     'absolute-user-path': re.compile(r'''(?i)(?:[A-Z]:[\\/]+(?:Users|Documents and Settings)[\\/]+[^\s<>$%"'\\/]+|/(?:Users|home)/[^\s<>$%"'/]+)'''),
-    'private-email': re.compile(r'(?i)\b[A-Z0-9.!#$%&*+/=?^_`{|}~-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b'),
+    'private-email': re.compile(r'(?i)\b[A-Z0-9.!#$%&*+/=?^_`{|}~-]+(?:\[bot\])?@[A-Z0-9.-]+\.[A-Z]{2,}\b'),
     'session-uuid': re.compile(r'(?i)\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b'),
 }
-PUBLIC_NOREPLY = re.compile(r'(?:[0-9]+\+)?[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?@users\.noreply\.github\.com')
+PUBLIC_NOREPLY = re.compile(r'(?:[0-9]+\+)?[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?(?:\[bot\])?@users\.noreply\.github\.com')
+
+
+class InputError(ValueError):
+    """An input failure identified by a safe classification, never raw OS text."""
+
+
+def linked_stat(info):
+    return stat.S_ISLNK(info.st_mode) or bool(
+        getattr(info, 'st_file_attributes', 0) & getattr(stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 1024))
+
+
+def fingerprint(info):
+    return (info.st_dev, info.st_ino, info.st_mode, info.st_nlink, info.st_size,
+            info.st_mtime_ns, info.st_ctime_ns)
+
+
+def checked_path(path, root):
+    """Reject links and special files without resolving away their identities."""
+    path, root = Path(path).absolute(), Path(root).absolute()
+    if not path.is_relative_to(root) or '..' in path.parts:
+        raise InputError('path-outside-root')
+    components = [root]
+    current = root
+    for part in path.relative_to(root).parts:
+        current = current / part
+        components.append(current)
+    for component in components:
+        info = component.lstat()
+        if linked_stat(info):
+            raise InputError('symlink-or-reparse-point')
+        if component != path and not stat.S_ISDIR(info.st_mode):
+            raise InputError('nonregular-file')
+    info = path.lstat()
+    if stat.S_ISREG(info.st_mode) and info.st_nlink != 1:
+        raise InputError('hardlinked-file')
+    if not (stat.S_ISDIR(info.st_mode) or stat.S_ISREG(info.st_mode)):
+        raise InputError('nonregular-file')
+    return info
+
+
+def read_regular(path, root, max_bytes=MAX_BYTES):
+    """Read a bounded stable regular file; callers audit the returned immutable bytes.
+
+    Descriptor checks and no-follow where available narrow pathname races. This is
+    not an OS sandbox against a hostile process controlling parent directories.
+    """
+    before = checked_path(path, root)
+    if not stat.S_ISREG(before.st_mode):
+        raise InputError('nonregular-file')
+    if before.st_size > max_bytes:
+        raise InputError('scan-size-limit')
+    flags = os.O_RDONLY | getattr(os, 'O_BINARY', 0) | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_NONBLOCK', 0)
+    descriptor = os.open(path, flags)
+    try:
+        opened = os.fstat(descriptor)
+        if fingerprint(opened) != fingerprint(before):
+            raise InputError('input-changed-during-read')
+        data = bytearray()
+        while len(data) <= max_bytes:
+            block = os.read(descriptor, min(65536, max_bytes + 1 - len(data)))
+            if not block:
+                break
+            data.extend(block)
+        if len(data) > max_bytes:
+            raise InputError('scan-size-limit')
+        if fingerprint(os.fstat(descriptor)) != fingerprint(opened):
+            raise InputError('input-changed-during-read')
+    finally:
+        os.close(descriptor)
+    if fingerprint(checked_path(path, root)) != fingerprint(before):
+        raise InputError('input-changed-during-read')
+    return bytes(data)
+
+
+def bounded_command(command, *, input_data=None, env=None, timeout=60, max_bytes=MAX_GIT_BYTES):
+    """Bound stdout while the child runs; discard stderr that can contain secrets."""
+    if input_data is not None and len(input_data) > max_bytes:
+        raise InputError('git-input-size-limit')
+    process = subprocess.Popen(command, stdin=subprocess.PIPE if input_data is not None else subprocess.DEVNULL,
+                               stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, shell=False, env=env,
+                               creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+    data = bytearray()
+    limit_hit = threading.Event()
+    read_failed = threading.Event()
+
+    def read_output():
+        try:
+            while True:
+                chunk = os.read(process.stdout.fileno(), min(65536, max_bytes + 1))
+                if not chunk:
+                    break
+                if len(data) + len(chunk) > max_bytes:
+                    limit_hit.set()
+                    process.kill()
+                    break
+                data.extend(chunk)
+        except OSError:
+            read_failed.set()
+        finally:
+            process.stdout.close()
+
+    def write_input():
+        try:
+            process.stdin.write(input_data)
+        except OSError:
+            pass
+        finally:
+            try:
+                process.stdin.close()
+            except OSError:
+                pass
+
+    reader = threading.Thread(target=read_output, daemon=True)
+    reader.start()
+    writer = None
+    if input_data is not None:
+        writer = threading.Thread(target=write_input, daemon=True)
+        writer.start()
+    try:
+        status = process.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=5)
+        raise InputError('git-scan-timeout') from None
+    finally:
+        reader.join(timeout=2)
+        if writer is not None:
+            writer.join(timeout=2)
+    if limit_hit.is_set():
+        raise InputError('git-output-size-limit')
+    if status or read_failed.is_set() or reader.is_alive() or (writer is not None and writer.is_alive()):
+        raise InputError('git-scan-failed')
+    return bytes(data)
 
 
 class Auditor:
@@ -44,6 +184,7 @@ class Auditor:
         self.allow_github_noreply_identities = allow_github_noreply_identities
         self.findings = []
         self.checked = 0
+        self.git_deadline = None
 
     def display_path(self, name):
         name = str(name).replace('\\', '/')
@@ -111,47 +252,61 @@ class Auditor:
 
     @staticmethod
     def linked(path):
-        attrs = getattr(path.lstat(), 'st_file_attributes', 0)
-        return path.is_symlink() or bool(attrs & getattr(stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 0))
+        return linked_stat(path.lstat())
 
     def working_tree(self, root):
         if self.linked(root):
             self.add('.', 'symlink-or-reparse-point')
             return
-        def visit(directory):
+        entries_seen = 0
+        def visit(directory, depth=0):
+            nonlocal entries_seen
+            if depth > MAX_DEPTH:
+                self.add('.', 'scan-depth-limit')
+                return
             try:
-                entries = list(directory.iterdir())
+                entries = list(islice(directory.iterdir(), MAX_ENTRIES + 1))
+                if len(entries) > MAX_ENTRIES:
+                    raise InputError('scan-entry-limit')
             except OSError:
                 self.add(directory.relative_to(root).as_posix(), 'scan-read-error')
                 return
             for entry in sorted(entries):
+                entries_seen += 1
+                if entries_seen > MAX_ENTRIES:
+                    raise InputError('scan-entry-limit')
                 name = entry.relative_to(root).as_posix()
                 if entry.name == '.git' and entry.parent == root:
                     continue
                 try:
                     self.path_checks(name)
-                    if self.linked(entry):
-                        self.add(name, 'symlink-or-reparse-point')
-                    elif entry.is_dir():
-                        visit(entry)
-                    elif entry.is_file():
-                        if entry.stat().st_size > self.max_bytes:
-                            self.add(name, 'scan-size-limit')
-                        else:
-                            self.data_checks(entry.read_bytes(), name)
+                    info = checked_path(entry, root)
+                    if stat.S_ISDIR(info.st_mode):
+                        visit(entry, depth + 1)
+                    elif stat.S_ISREG(info.st_mode):
+                        self.data_checks(read_regular(entry, root, self.max_bytes), name)
                     else:
                         self.add(name, 'nonregular-file')
+                except InputError as error:
+                    self.add(name, str(error))
                 except OSError:
                     self.add(name, 'scan-read-error')
         visit(root)
 
-    @staticmethod
-    def git(root, args, input_data=None):
-        completed = subprocess.run(['git', '-C', str(root), *args], input=input_data,
-                                   capture_output=True, shell=False, timeout=60)
-        if completed.returncode:
-            raise ValueError('git-scan-failed')
-        return completed.stdout
+    def git(self, root, args, input_data=None):
+        if self.git_deadline is None:
+            self.git_deadline = time.monotonic() + GIT_SCAN_SECONDS
+        remaining = self.git_deadline - time.monotonic()
+        if remaining <= 0:
+            raise InputError('git-scan-timeout')
+        # A caller's alternate index/worktree/config must not redirect this scan.
+        env = {key: value for key, value in os.environ.items() if not key.upper().startswith('GIT_')}
+        env.update({'GIT_CONFIG_NOSYSTEM': '1', 'GIT_CONFIG_GLOBAL': os.devnull,
+                    'GIT_TERMINAL_PROMPT': '0', 'GIT_NO_REPLACE_OBJECTS': '1',
+                    'GIT_NO_LAZY_FETCH': '1', 'GIT_OPTIONAL_LOCKS': '0'})
+        return bounded_command(['git', '-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=' + os.devnull,
+                                '-C', str(root), *args], input_data=input_data, env=env,
+                               timeout=min(60, remaining))
 
     def git_blob(self, root, oid, name, origin, mode=None):
         self.path_checks(name, origin)
@@ -166,6 +321,8 @@ class Auditor:
     def staged(self, root):
         self.require_git_root(root)
         entries = self.git(root, ['ls-files', '--stage', '-z']).split(b'\x00')
+        if len(entries) > MAX_ENTRIES + 1:
+            raise InputError('index-scan-size-limit')
         for entry in entries:
             if not entry:
                 continue
@@ -181,7 +338,15 @@ class Auditor:
 
     def history(self, root):
         self.require_git_root(root)
-        commits = self.git(root, ['rev-list', '--all']).splitlines()
+        if self.git(root, ['rev-parse', '--is-shallow-repository']).strip() == b'true':
+            self.add('<git-history>', 'shallow-history-unscanned', origin='git-history')
+            return
+        refs = self.git(root, ['for-each-ref', '--count=10001', '--format=%(refname)']).splitlines()
+        if len(refs) > MAX_ENTRIES:
+            raise InputError('history-scan-size-limit')
+        for ref in refs:
+            self.data_checks(ref, '<git-ref>', 'git-refs')
+        commits = self.git(root, ['rev-list', '--max-count=1001', '--all']).splitlines()
         if len(commits) > 1000:
             raise ValueError('history-scan-size-limit')
         seen_entries = set()
@@ -196,6 +361,8 @@ class Auditor:
                 if identity in seen_entries:
                     continue
                 seen_entries.add(identity)
+                if len(seen_entries) > MAX_ENTRIES:
+                    raise InputError('history-scan-size-limit')
                 name = raw_name.decode('utf-8', errors='replace')
                 origin = 'git-history:' + commit.decode('ascii')[:12]
                 self.path_checks(name, origin)
@@ -208,6 +375,8 @@ class Auditor:
         for line in objects:
             oid, _, name = line.partition(b' ')
             mapping[oid.decode('ascii')] = name.decode('utf-8', errors='replace') or '<git-object>'
+            if len(mapping) > MAX_ENTRIES:
+                raise InputError('history-scan-size-limit')
         if len(mapping) > 10000:
             raise ValueError('history-scan-size-limit')
         if not mapping:

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
  * Protect Secrets - CAS Codex adaptation for literal file paths and commands
- * Intercepts access to sensitive files and escalates to user confirmation.
- * Based on karanb192/claude-code-hooks, modified to use "ask" instead of "deny".
+ * Denies recognized access to sensitive files using Codex's supported contract.
+ * Based on karanb192/claude-code-hooks; native permissions remain authoritative.
  *
  * SAFETY_LEVEL: 'critical' | 'high' | 'strict'
  *   critical - SSH keys, AWS creds, .env files only
@@ -15,8 +15,7 @@
  * scripts and is not a security boundary.
  */
 
-const fs = require('fs');
-const path = require('path');
+const { readEvent, deny } = require('./hook-io.cjs');
 const { expandedSegments, executableName, nestedCommands, gitSubcommand, REDIRECTION } = require('./safety-command-parser.cjs');
 
 const SAFETY_LEVEL = 'high';
@@ -29,6 +28,10 @@ const ALLOWLIST = [
 
 // Sensitive file patterns for Read, Edit, Write tools
 const SENSITIVE_FILES = [
+  { level: 'critical', id: 'auth-json', regex: /(?:^|\/)auth\.json$/, reason: 'Authentication state contains credentials' },
+  { level: 'critical', id: 'git-credentials', regex: /(?:^|\/)\.git-credentials$/, reason: 'Git credential store' },
+  { level: 'critical', id: 'gh-auth', regex: /(?:^|\/)(?:gh|github-cli)\/hosts\.ya?ml$/, reason: 'GitHub CLI credential store' },
+  { level: 'critical', id: 'gcloud-adc', regex: /(?:^|\/)application_default_credentials\.json$/, reason: 'Cloud application credentials' },
   // CRITICAL
   { level: 'critical', id: 'env-file',           regex: /(?:^|\/)\.env(?:\.[^/]*)?$/,                    reason: '.env file contains secrets' },
   { level: 'critical', id: 'envrc',              regex: /(?:^|\/)\.envrc$/,                              reason: '.envrc (direnv) contains secrets' },
@@ -84,7 +87,7 @@ const BASH_PATTERNS = [
 
   // HIGH - Exfiltration
   { level: 'high', id: 'curl-upload-env',        regex: /\bcurl\b[^;|&]*(-d\s*@|-F\s*[^=]+=@|--data[^=]*=@)[^;|&]*(\.env|credentials|secrets|id_rsa|\.pem|\.key)/i, reason: 'Uploading secrets via curl' },
-  { level: 'high', id: 'curl-post-secrets',      regex: /\bcurl\b[^;|&]*-X\s*POST[^;|&]*[^;|&]*(\.env|credentials|secrets)/i, reason: 'POSTing secrets via curl' },
+  { level: 'high', id: 'curl-post-secrets',      regex: /\bcurl\b[^;|&]*-X\s*POST[^;|&]*(\.env|credentials|secrets)/i, reason: 'POSTing secrets via curl' },
   { level: 'high', id: 'wget-post-secrets',      regex: /\bwget\b[^;|&]*--post-file[^;|&]*(\.env|credentials|secrets)/i,  reason: 'POSTing secrets via wget' },
   { level: 'high', id: 'scp-secrets',            regex: /\bscp\b[^;|&]*(\.env|credentials|secrets|id_rsa|\.pem|\.key)[^;|&]+:/i, reason: 'Copying secrets via scp' },
   { level: 'high', id: 'rsync-secrets',          regex: /\brsync\b[^;|&]*(\.env|credentials|secrets|id_rsa)[^;|&]+:/i,    reason: 'Syncing secrets via rsync' },
@@ -110,21 +113,12 @@ const BASH_PATTERNS = [
 
 const LEVELS = { critical: 1, high: 2, strict: 3 };
 const EMOJIS = { critical: '!!!', high: '!!', strict: '!' };
-const LOG_DIR = path.join(process.env.CODEX_HOME || path.join(require('os').homedir(), '.codex'), 'hooks-logs');
-
-function log(data) {
-  try {
-    if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
-    const file = path.join(LOG_DIR, `${new Date().toISOString().slice(0, 10)}.jsonl`);
-    fs.appendFileSync(file, JSON.stringify({ ts: new Date().toISOString(), hook: 'protect-secrets', ...data }) + '\n');
-  } catch {}
-}
-
 function normalizeFilePath(filePath) {
   if (typeof filePath !== 'string') return '';
   return filePath.trim().replace(/^(['"])(.*)\1$/, '$2')
     .replace(/^Microsoft\.PowerShell\.Core\\FileSystem::/i, '')
-    .replace(/^FileSystem::/i, '').replace(/\\/g, '/').toLowerCase();
+    .replace(/^FileSystem::/i, '').replace(/\\/g, '/').toLowerCase()
+    .split('/').map(part => /^[a-z]:$/.test(part) ? part : part.split(':')[0].replace(/[. ]+$/, '')).join('/');
 }
 
 function isAllowlisted(filePath) {
@@ -164,6 +158,33 @@ function checkEnvProvider(words, threshold) {
   return null;
 }
 
+function searchFileOperands(words, executable) {
+  const args = words.slice(1);
+  if (!['rg', 'grep', 'select-string', 'sls'].includes(executable)) return args;
+  const powershell = ['select-string', 'sls'].includes(executable);
+  const paths = [];
+  let explicitPattern = args.some(word => powershell ? /^-pattern(?::|$)/i.test(word) :
+    /^(?:-e|-f|--regexp(?:=|$)|--file(?:=|$))/.test(word));
+  let positionalPattern = explicitPattern || args.includes('--files');
+  const nonFileOptions = new Set(['--max-count', '--max-depth', '--max-columns', '--encoding', '--color', '--colors',
+    '--context', '--before-context', '--after-context', '-m', '-A', '-B', '-C', '-j', '--threads', '-g', '--glob',
+    '--iglob', '-t', '--type', '-T', '--type-not', '-Pattern', '-pattern', '-Encoding', '-encoding', '-Context', '-context']);
+  for (let index = 0; index < args.length; index++) {
+    const word = args[index];
+    if ((powershell && /^-pattern$/i.test(word)) || (!powershell && ['-e', '--regexp'].includes(word))) { index++; continue; }
+    if ((powershell && /^-pattern:/i.test(word)) || (!powershell && /^(?:-e.+|--regexp=)/.test(word))) continue;
+    if (!powershell && ['-f', '--file'].includes(word)) { if (index + 1 < args.length) paths.push(args[++index]); continue; }
+    if (!powershell && /^-f.+/.test(word)) { paths.push(word.slice(2)); continue; }
+    if (nonFileOptions.has(word)) { index++; continue; }
+    if (word.startsWith('-')) { paths.push(word); continue; }
+    // PowerShell named -Pattern was handled above; positional syntax stays
+    // conservative because aliases and parameter binding are not interpreted.
+    if (!powershell && !positionalPattern) { positionalPattern = true; continue; }
+    paths.push(word);
+  }
+  return paths;
+}
+
 function checkBashCommand(cmd, safetyLevel = SAFETY_LEVEL) {
   if (typeof cmd !== 'string' || !cmd) return { blocked: false, pattern: null };
   const threshold = LEVELS[safetyLevel] || 2;
@@ -172,7 +193,8 @@ function checkBashCommand(cmd, safetyLevel = SAFETY_LEVEL) {
   // File operations now inspect individual paths, including template exceptions.
   const pathPatternIds = new Set(['cat-env', 'cat-ssh-key', 'cat-aws-creds', 'cat-secrets-file', 'cat-netrc',
     'source-env', 'export-cat-env', 'cp-env', 'cp-ssh-key', 'mv-env', 'git-add-env', 'git-add-private-key', 'git-add-secrets', 'truncate-secrets', 'base64-secrets']);
-  const readers = new Set(['cat', 'less', 'head', 'tail', 'more', 'bat', 'view', 'get-content', 'gc', 'type', 'source', '.']);
+  const readers = new Set(['cat', 'less', 'head', 'tail', 'more', 'bat', 'view', 'get-content', 'gc', 'type', 'source', '.',
+    'rg', 'grep', 'sed', 'awk', 'select-string', 'sls', 'base64', 'certutil', 'zip', 'tar']);
   const fileOperations = new Set(['cp', 'mv', 'copy', 'copy-item', 'cpi', 'move', 'move-item', 'mi', 'truncate', 'set-content', 'sc', 'add-content', 'ac', 'out-file']);
   for (const words of segments) {
     const executable = executableName(words[0]);
@@ -184,11 +206,12 @@ function checkBashCommand(cmd, safetyLevel = SAFETY_LEVEL) {
     const gitCommand = executable === 'git' ? gitSubcommand(words) : null;
     const readsPaths = readers.has(executable) || fileOperations.has(executable) ||
       gitCommand?.name === 'add' ||
-      (executable === 'base64' && threshold >= LEVELS.strict);
+      ['curl', 'wget', 'scp', 'rsync'].includes(executable);
     if (readsPaths) {
-      for (const token of words.slice(gitCommand ? gitCommand.index + 1 : 1)) {
+      const operands = gitCommand ? words.slice(gitCommand.index + 1) : searchFileOperands(words, executable);
+      for (const token of operands) {
         for (let candidate of token.split(',')) {
-          candidate = candidate.replace(/^-(?:literalpath|path):/i, '');
+          candidate = candidate.replace(/^-(?:literalpath|path):/i, '').replace(/^--[a-z-]+=/i, '').replace(/^@/, '');
           const result = checkFilePath(candidate, safetyLevel);
           if (result.blocked) return result;
         }
@@ -211,7 +234,7 @@ function checkBashCommand(cmd, safetyLevel = SAFETY_LEVEL) {
     }
     // Mask only individual known template paths. Never exempt a whole command
     // because its last token happens to name a safe example file.
-    const sanitized = words.map(word => isAllowlisted(word.replace(/^@/, '')) ? 'SAFE_TEMPLATE' : word).join(' ');
+    const sanitized = words.map(word => isAllowlisted(word.replace(/^--[a-z-]+=/i, '').replace(/^@/, '')) ? 'SAFE_TEMPLATE' : word).join(' ');
     for (const p of BASH_PATTERNS) {
       if (!pathPatternIds.has(p.id) && LEVELS[p.level] <= threshold && p.regex.test(sanitized)) {
         return { blocked: true, pattern: p };
@@ -248,38 +271,28 @@ function check(toolName, toolInput, safetyLevel = SAFETY_LEVEL) {
 }
 
 async function main() {
-  let input = '';
-  for await (const chunk of process.stdin) input += chunk;
-
   try {
-    const data = JSON.parse(input);
+    const data = await readEvent();
     const { tool_name, tool_input } = data;
-
+    if (data.hook_event_name !== 'PreToolUse') return console.log('{}');
     const tool = String(tool_name || '').split('.').at(-1);
     if (!['Read', 'Edit', 'Write', 'Bash', 'exec_command', 'apply_patch'].includes(tool)) {
       return console.log('{}');
     }
 
+    const value = ['Read', 'Edit', 'Write'].includes(tool) ? tool_input?.file_path :
+      typeof tool_input === 'string' ? tool_input : tool_input?.command ?? tool_input?.cmd ?? tool_input?.patch;
+    if (typeof value !== 'string' || !value.trim()) return deny();
     const result = check(tool_name, tool_input);
 
     if (result.blocked) {
       const p = result.pattern;
-      log({ level: 'ASK', id: p.id, priority: p.level, tool });
-
       const action = { Read: 'read', Edit: 'modify', Write: 'write to', Bash: 'execute', exec_command: 'execute', apply_patch: 'modify' }[tool];
-      return console.log(JSON.stringify({
-        hookSpecificOutput: {
-          hookEventName: 'PreToolUse',
-          permissionDecision: 'ask',
-          permissionDecisionReason: `${EMOJIS[p.level]} [${p.id}] Cannot ${action}: ${p.reason} — approve to proceed`
-        }
-      }));
+      return deny(`${EMOJIS[p.level]} [${p.id}] Cannot ${action}: ${p.reason}. Use a redacted fixture; do not bypass this denial through another tool.`);
     }
     console.log('{}');
-  } catch (e) {
-    // JSON parser errors can quote input containing secrets.
-    log({ level: 'ERROR', id: 'invalid-input-or-check-failure' });
-    console.log('{}');
+  } catch {
+    deny();
   }
 }
 
@@ -288,6 +301,6 @@ if (require.main === module) {
 } else {
   module.exports = {
     SENSITIVE_FILES, BASH_PATTERNS, ALLOWLIST, LEVELS, SAFETY_LEVEL,
-    check, checkFilePath, checkBashCommand, isAllowlisted, normalizeFilePath, patchPaths, checkEnvProvider,
+    check, checkFilePath, checkBashCommand, isAllowlisted, normalizeFilePath, patchPaths, checkEnvProvider, searchFileOperands,
   };
 }

@@ -1,7 +1,7 @@
 "use strict";
 
 // Offline, read-only routing hints. The live collaboration tool catalog wins.
-const fs = require("node:fs");
+const { readBoundedFile } = require("./hook-io.cjs");
 const os = require("node:os");
 const path = require("node:path");
 
@@ -12,8 +12,10 @@ const ROLES = {
 };
 
 function version(slug, family) {
+  if (typeof slug !== "string" || slug.length > 80) return null;
   const match = new RegExp(`^gpt-(\\d+(?:\\.\\d+)*)-${family}$`).exec(slug || "");
-  return match ? match[1].split(".").map(Number) : null;
+  const parts = match ? match[1].split(".").map(Number) : null;
+  return parts && parts.length <= 6 && parts.every(Number.isSafeInteger) ? parts : null;
 }
 
 function compareVersions(a, b) {
@@ -25,7 +27,7 @@ function compareVersions(a, b) {
 }
 
 function resolveModels(catalog) {
-  const models = Array.isArray(catalog?.models) ? catalog.models : [];
+  const models = Array.isArray(catalog?.models) && catalog.models.length <= 512 ? catalog.models : [];
   const result = {};
   for (const [role, rule] of Object.entries(ROLES)) {
     const candidates = models.filter(m => m?.visibility === "list" && version(m.slug, rule.family) &&
@@ -60,7 +62,7 @@ function resolveCapabilities(catalog) {
 
 function loadCatalog() {
   const home = process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
-  try { return JSON.parse(fs.readFileSync(path.join(home, "models_cache.json"), "utf8")); }
+  try { return JSON.parse(readBoundedFile(path.join(home, "models_cache.json"))); }
   catch { return null; }
 }
 
