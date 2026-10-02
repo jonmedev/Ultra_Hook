@@ -11,6 +11,9 @@
    audit, verify the SHA-256, and install from that extracted copy in a fresh Codex
    home with spaces in its path. Test installation twice and uninstall. Hook trust
    remains a real user review step. An untrusted hook must stay pending.
+   Also verify the quick-start native commands from a fresh profile outside this
+   checkout: Git marketplace add with the release tag, plugin add, metadata discovery
+   and native removal. Test upgrades through the documented remove/reinstall path.
 4. When a UI surface changed, perform the relevant AgentController check on a
    supported target and retain evidence locally. Otherwise state why UI QA is
    not applicable and exercise the affected CLI/API/library. Publish screenshots
@@ -20,7 +23,7 @@
    Publishing requires the maintainer's explicit decision; preparing this repository
    does not itself push commits, create tags or publish a release.
 6. Once publication is authorized, push the reviewed commits and an annotated
-   version tag such as `v0.1.3`. The tag workflow reruns CI and verifies that the tag
+   version tag such as `v0.1.4`. The tag workflow reruns CI and verifies that the tag
    matches the manifest before creating the GitHub release with ZIP and checksum.
    It also signs build provenance. Download the published archive, verify its
    attestation against the expected repository/workflow/tag, compare its bytes with

@@ -1,16 +1,31 @@
 # Ultra Hook __VERSION__
 
-## Download Ultra Hook
+## Install: two commands
+
+With Codex CLI signed in, Node.js LTS and Git installed, open PowerShell or Terminal:
+
+```sh
+codex plugin marketplace add jonmedev/Ultra_Hook --ref v__VERSION__
+codex plugin add ultra-hook@ultra-hook
+```
+
+Codex downloads and installs the plugin. **No ZIP extraction or Python is needed
+for this method.** In Codex, review the five hooks in `/hooks`, start a new conversation
+and send `$ultra-hook` followed by your task.
+
+[Quick start and examples](https://github.com/jonmedev/Ultra_Hook/blob/v__VERSION__/docs/GETTING_STARTED.md)
+explain activation, prerequisites and the separate update paths for existing installations.
+
+## Alternative: manual ZIP download
 
 - [Plugin ZIP](https://github.com/jonmedev/Ultra_Hook/releases/download/v__VERSION__/ultra-hook-__VERSION__.zip)
 - [SHA-256 checksum](https://github.com/jonmedev/Ultra_Hook/releases/download/v__VERSION__/ultra-hook-__VERSION__.sha256)
 - [Verify the download and provenance](https://github.com/jonmedev/Ultra_Hook/blob/v__VERSION__/SECURITY.md#verify-a-download)
 - [Installation, activation and usage](https://github.com/jonmedev/Ultra_Hook/blob/v__VERSION__/docs/GETTING_STARTED.md)
 
-Extract the verified ZIP into a directory you will keep. From that root, run
-`python -B scripts/install.py --dry-run`, then `python -B scripts/install.py`.
-Review and approve hooks in Codex `/hooks`, run `python -B scripts/doctor.py`,
-and start a new session. On macOS/Linux use `python3`.
+The ZIP route uses Python management scripts. Follow the
+[advanced guide](https://github.com/jonmedev/Ultra_Hook/blob/v__VERSION__/docs/ADVANCED_INSTALL.md)
+and do not combine both installation methods on the same profile registration.
 
 ## AgentController is by Kasempiternal
 
@@ -29,10 +44,9 @@ Hook's UI validation workflow. Discovery of its tools is not a completed UI test
 
 ## Existing installations
 
-Follow the [upgrade instructions](https://github.com/jonmedev/Ultra_Hook/blob/v__VERSION__/docs/GETTING_STARTED.md#upgrade-or-remove).
-Remove the owned older installation using its original source/profile, retain
-backups, then install the new version from its own extracted directory. Scripts
-provide readable output by default; add `--json` for automation.
+Follow the [upgrade instructions](https://github.com/jonmedev/Ultra_Hook/blob/v__VERSION__/docs/GETTING_STARTED.md#update-or-remove)
+for your original installation method. Native installs update through Codex;
+script-managed ZIP installs retain their owned removal/backup procedure.
 
 The release workflow runs portable checks on Windows and Linux before publishing
 and signs the archive's build provenance. These checks do not establish universal

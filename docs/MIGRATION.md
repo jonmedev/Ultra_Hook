@@ -14,6 +14,10 @@ credentials or remove another plugin. Review any older orchestration instruction
 before using both systems together; contradictory global policies are not reconciled
 by installing a skill.
 
+For an existing CAS installation, use the [script-managed migration](ADVANCED_INSTALL.md#3-preview-and-install)
+with `--replace-cas`. The quick native installation does not disable CAS or create
+a migration receipt; do not leave both orchestration plugins active together.
+
 ## Workflow mapping
 
 The old names are migration guidance, not commands or aliases distributed in v0.1.

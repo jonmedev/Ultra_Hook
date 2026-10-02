@@ -67,21 +67,26 @@ screenshots privately; do not capture unrelated applications.
 
 ## Verify a download
 
+The quick-start native commands fetch Git source at the specified release tag.
+They do not download or verify the attested ZIP described below. Use the explicit
+tag, inspect the source and review hooks through Codex. Choose the manual ZIP
+route if you need to verify that exact signed build artifact before installation.
+
 Download the versioned ZIP and checksum from this repository's GitHub Releases.
 Compare the checksum. In PowerShell, from the download directory:
 
 ```powershell
-$actual = (Get-FileHash -Algorithm SHA256 ./ultra-hook-0.1.3.zip).Hash.ToLowerInvariant()
-$expected = ((Get-Content ./ultra-hook-0.1.3.sha256 -Raw).Trim() -split '\s+')[0]
+$actual = (Get-FileHash -Algorithm SHA256 ./ultra-hook-0.1.4.zip).Hash.ToLowerInvariant()
+$expected = ((Get-Content ./ultra-hook-0.1.4.sha256 -Raw).Trim() -split '\s+')[0]
 if ($actual -ne $expected) { throw 'Checksum mismatch: do not install.' }
 ```
 
-On Linux use `sha256sum -c ultra-hook-0.1.3.sha256`; on macOS use
-`shasum -a 256 -c ultra-hook-0.1.3.sha256`. A matching checksum alone does not
+On Linux use `sha256sum -c ultra-hook-0.1.4.sha256`; on macOS use
+`shasum -a 256 -c ultra-hook-0.1.4.sha256`. A matching checksum alone does not
 authenticate its publisher. Verify signed provenance with GitHub CLI:
 
 ```sh
-gh attestation verify ultra-hook-0.1.3.zip --repo jonmedev/Ultra_Hook --signer-workflow jonmedev/Ultra_Hook/.github/workflows/release.yml --source-ref refs/tags/v0.1.3 --deny-self-hosted-runners
+gh attestation verify ultra-hook-0.1.4.zip --repo jonmedev/Ultra_Hook --signer-workflow jonmedev/Ultra_Hook/.github/workflows/release.yml --source-ref refs/tags/v0.1.4 --deny-self-hosted-runners
 ```
 
 This checks artifact identity and the expected repository, workflow and tag.
