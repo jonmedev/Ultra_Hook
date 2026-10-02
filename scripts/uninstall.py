@@ -4,7 +4,7 @@ import argparse
 import json
 from pathlib import Path
 import sys
-from install import CLI, CAS, PLUGIN, MARKETPLACE, SERVER, InstallError, codex_home, load_config, same_path, set_plugin_enabled, installation_lock, write_private, marketplaces, fingerprint, guard_path, private_bytes, MAX_RECEIPT_BYTES, plugin_catalog, protected
+from install import CLI, CAS, PLUGIN, MARKETPLACE, SERVER, InstallError, codex_home, load_config, same_path, set_plugin_enabled, installation_lock, write_private, marketplaces, fingerprint, guard_path, private_bytes, MAX_RECEIPT_BYTES, plugin_catalog, protected, emit_result, OutputParser
 
 
 def uninstall(home, cli, dry_run=False):
@@ -65,20 +65,21 @@ def uninstall(home, cli, dry_run=False):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = OutputParser(description=__doc__)
     parser.add_argument('--codex-home')
     parser.add_argument('--codex-command')
     parser.add_argument('--dry-run', action='store_true')
+    parser.add_argument('--json', action='store_true', help='Emit safe JSON only, for automation (default: readable summary).')
     args = parser.parse_args()
     try:
         home = codex_home(args.codex_home)
-        print(json.dumps(uninstall(home, CLI(home, args.codex_command), args.dry_run), indent=2))
+        emit_result('uninstall', uninstall(home, CLI(home, args.codex_command), args.dry_run), json_output=args.json)
         return 0
     except InstallError as exc:
-        print(json.dumps({'status': 'error', 'message': str(exc)}), file=sys.stderr)
+        emit_result('uninstall', {'status': 'error', 'message': str(exc)}, json_output=args.json, stream=sys.stderr)
         return 1
     except (OSError, ValueError, TypeError, KeyError, AttributeError):
-        print(json.dumps({'status': 'error', 'message': 'Removal failed; private diagnostics withheld.'}), file=sys.stderr)
+        emit_result('uninstall', {'status': 'error', 'message': 'Removal failed; private diagnostics withheld.'}, json_output=args.json, stream=sys.stderr)
         return 1
 
 

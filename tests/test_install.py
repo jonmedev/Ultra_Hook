@@ -6,6 +6,8 @@ import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
+import io
+from contextlib import redirect_stdout, redirect_stderr
 from unittest import mock
 
 sys.dont_write_bytecode = True
@@ -241,6 +243,73 @@ class InstallerTests(unittest.TestCase):
             uninstall.uninstall(self.home, self.cli)
         self.assertFalse(self.cli.calls)
 
+    def new_source(self):
+        target=self.root/'new extracted repo with spaces'
+        install.shutil.copytree(self.repo,target)
+        return target
+
+    def test_uninstall_then_new_source_preserves_terminal_receipt_backup(self):
+        self.execute(runtime_check=lambda *_:runtime())
+        uninstall.uninstall(self.home,self.cli)
+        prior=(self.home/'.ultra-hook/receipt.json').read_bytes()
+        target=self.new_source()
+        for manifest in ('plugin.json','.codex-plugin/plugin.json'):
+            (target/'plugins/ultra-hook'/manifest).write_text(json.dumps({'name':'ultra-hook','version':'0.1.2'}))
+        self.cli.version='0.1.2'
+        result=install.install(target,self.home,self.cli,runtime_check=lambda *_:runtime())
+        receipt=json.loads((self.home/'.ultra-hook/receipt.json').read_bytes())
+        self.assertEqual(receipt['repo'],str(target.resolve()))
+        self.assertEqual(receipt['version'],'0.1.2')
+        self.assertTrue(receipt['createdPlugin'])
+        self.assertFalse(receipt['disabledCas'])
+        self.assertFalse(receipt['createdMcp'])
+        self.assertEqual((Path(result['backup'])/'receipt.json').read_bytes(),prior)
+
+    def test_ambiguous_terminal_receipt_cannot_switch_sources(self):
+        self.execute(runtime_check=lambda *_:runtime())
+        uninstall.uninstall(self.home,self.cli)
+        path=self.home/'.ultra-hook/receipt.json'
+        terminal=json.loads(path.read_bytes())
+        target=self.new_source()
+        variants=[]
+        for key in ('createdPlugin','createdMarketplace','createdMcp','disabledCas'):
+            missing=dict(terminal);missing.pop(key);variants.append(missing)
+            enabled=dict(terminal);enabled[key]=True;variants.append(enabled)
+            mistyped=dict(terminal);mistyped[key]=0;variants.append(mistyped)
+        active=dict(terminal);active['uninstalled']=False;variants.append(active)
+        mistyped=dict(terminal);mistyped['uninstalled']=1;variants.append(mistyped)
+        wrong=dict(terminal);wrong['plugin']='unrelated@plugin';variants.append(wrong)
+        variants.append({})
+        for receipt in variants:
+            with self.subTest(receipt=receipt):
+                path.write_text(json.dumps(receipt))
+                before=path.read_bytes()
+                self.cli.calls=[]
+                with self.assertRaises(install.InstallError):
+                    install.install(target,self.home,self.cli,runtime_check=lambda *_:runtime())
+                self.assertEqual(path.read_bytes(),before)
+                self.assertFalse(any(call[:2]==['plugin','add'] or call[:3]==['plugin','marketplace','add']for call in self.cli.calls))
+
+    def test_failed_new_install_retains_terminal_receipt_and_its_backup(self):
+        self.execute(runtime_check=lambda *_:runtime())
+        uninstall.uninstall(self.home,self.cli)
+        path=self.home/'.ultra-hook/receipt.json';prior=path.read_bytes()
+        self.cli.fail_add=True
+        with self.assertRaises(install.InstallError):
+            install.install(self.new_source(),self.home,self.cli,runtime_check=lambda *_:runtime())
+        self.assertEqual(path.read_bytes(),prior)
+        self.assertTrue(any(backup.read_bytes()==prior for backup in (self.home/'.ultra-hook/backups').glob('*/receipt.json')))
+        self.assertTrue(any(call[:2]==['plugin','add'] for call in self.cli.calls))
+        self.assertFalse(self.cli.installed)
+        self.assertNotIn('ultra-hook',self.cli.markets)
+
+    def test_terminal_receipt_same_source_is_also_backed_up(self):
+        self.execute(runtime_check=lambda *_:runtime())
+        uninstall.uninstall(self.home,self.cli)
+        prior=(self.home/'.ultra-hook/receipt.json').read_bytes()
+        result=self.execute(runtime_check=lambda *_:runtime())
+        self.assertEqual((Path(result['backup'])/'receipt.json').read_bytes(),prior)
+
     def test_hook_trust_summary_excludes_unrelated_hooks(self):
         hooks = trusted_hooks()
         hooks.append({'pluginId':'unrelated@plugin','enabled':True,'trustStatus':'untrusted'})
@@ -318,6 +387,120 @@ class InstallerTests(unittest.TestCase):
 
 def subprocess_if_available():
     return setup_agentcontroller.subprocess
+
+
+class OutputTests(unittest.TestCase):
+    def result(self, ready=False):
+        return {'status':'installed','version':'0.1.2','codexHome':'synthetic profile with spaces',
+                'commands':[],'runtime':{**runtime(ready),'hookDefinitionsMatch':True},
+                'agentcontroller':{'registered':False,'willRegister':False},'migrationPending':False}
+
+    def invoke(self, module, args, result=None, error=None):
+        target = 'install' if module is install else 'inspect' if module is doctor else 'uninstall'
+        stdout,stderr=io.StringIO(),io.StringIO()
+        with mock.patch.object(sys,'argv',[module.__name__+'.py']+args), \
+             mock.patch.object(module,'CLI',return_value=object()), \
+             mock.patch.object(module,'codex_home',return_value=Path('synthetic profile')), \
+             mock.patch.object(module,target,return_value=result,side_effect=error), \
+             redirect_stdout(stdout),redirect_stderr(stderr):
+            code=module.main()
+        return code,stdout.getvalue(),stderr.getvalue()
+
+    def test_install_pending_trust_and_cas_migration_have_safe_next_steps(self):
+        result=self.result();result['migrationPending']=True
+        code,text,errors=self.invoke(install,[],result)
+        self.assertEqual(code,0)
+        self.assertEqual(errors,'')
+        self.assertIn('open /hooks and review',text)
+        self.assertIn('CAS remains enabled',text)
+        self.assertIn('--replace-cas',text)
+        self.assertIn('UI validation requires',text)
+        self.assertNotIn('"status"',text)
+
+    def test_ready_and_idempotent_install_gives_usage_without_ui_pass(self):
+        result=self.result(True)
+        result['agentcontroller']['registered']=True
+        code,text,_=self.invoke(install,[],result)
+        self.assertEqual(code,0)
+        self.assertIn('Already installed',text)
+        self.assertIn('ask Codex to use the Ultra Hook skill',text)
+        self.assertIn('does not validate UI behavior',text)
+
+    def test_mismatched_definitions_never_tell_user_to_grant_trust(self):
+        result=self.result();result['runtime']['hookDefinitionsMatch']=False
+        text=install.human_result('install',result)
+        self.assertIn('Compare the installed package before granting hook trust',text)
+        self.assertNotIn('open /hooks',text)
+
+    def test_dry_run_describes_exact_action_types_without_claiming_installation(self):
+        result={'status':'plan','codexHome':'synthetic profile','commands':[
+            ['codex with spaces','plugin','marketplace','add','repo with spaces','--json'],
+            ['codex with spaces','plugin','add',install.PLUGIN,'--json'],
+            ['codex with spaces','mcp','add','agentcontroller','--','launcher with spaces']]}
+        code,text,_=self.invoke(install,['--dry-run'],result)
+        self.assertEqual(code,0)
+        self.assertIn('Plan only; no changes made.',text)
+        self.assertIn('Register the local',text)
+        self.assertIn('Register the supplied',text)
+        self.assertIn('without --dry-run',text)
+        self.assertNotIn('is installed and enabled',text)
+
+    def test_json_success_keeps_existing_objects_for_all_three_commands(self):
+        for module,result in ((install,self.result()),(doctor,{'ready':False,'safeMetadata':True}),
+                              (uninstall,{'status':'uninstalled','backupsPreserved':True})):
+            code,text,errors=self.invoke(module,['--json'],result)
+            self.assertEqual(json.loads(text),result)
+            self.assertEqual(errors,'')
+            self.assertEqual(code,2 if module is doctor else 0)
+
+    def test_json_errors_are_clean_and_private_exceptions_are_withheld(self):
+        for module in (install,doctor,uninstall):
+            for error in (install.InstallError('safe actionable issue'),ValueError('synthetic secret must not appear')):
+                code,text,errors=self.invoke(module,['--json'],error=error)
+                self.assertEqual(code,1)
+                self.assertEqual(text,'')
+                self.assertEqual(json.loads(errors)['status'],'error')
+                self.assertNotIn('synthetic secret',errors)
+
+    def test_doctor_distinguishes_catalog_discovery_from_ui_validation_and_exit_codes(self):
+        result={'ready':True,'enabled':True,'installed':True,'uiTransportDiscovered':True,
+                'agentcontrollerCheckRequested':True,'runtime':{**runtime(True),'hookDefinitionsMatch':True,
+                'agentcontrollerRuntime':{'toolCount':52}}}
+        code,text,_=self.invoke(doctor,[],result)
+        self.assertEqual(code,0)
+        self.assertIn('52 tools discovered',text)
+        self.assertIn('UI behavior has not been tested',text)
+        result['ready']=False;result['runtime']=runtime(False)
+        code,_,_=self.invoke(doctor,[],result)
+        self.assertEqual(code,2)
+
+    def test_uninstall_human_plan_shows_owned_removal_and_preserves_cas_restore(self):
+        result={'status':'plan','commands':[['codex','mcp','remove','agentcontroller']],
+                'restoreCas':True,'backupsPreserved':True}
+        code,text,_=self.invoke(uninstall,['--dry-run'],result)
+        self.assertEqual(code,0)
+        self.assertIn('owned AgentController',text)
+        self.assertIn('Restore CAS',text)
+        self.assertIn('no changes made',text)
+
+    def test_invalid_options_keep_json_clean_and_argparse_exit_code(self):
+        for module in (install,doctor,uninstall):
+            stdout,stderr=io.StringIO(),io.StringIO()
+            with mock.patch.object(sys,'argv',[module.__name__+'.py','--json','--unknown=synthetic-secret']), \
+                 redirect_stdout(stdout),redirect_stderr(stderr):
+                with self.assertRaises(SystemExit) as raised:
+                    module.main()
+            self.assertEqual(raised.exception.code,2)
+            self.assertEqual(stdout.getvalue(),'')
+            self.assertEqual(json.loads(stderr.getvalue())['status'],'error')
+            self.assertNotIn('synthetic-secret',stderr.getvalue())
+
+    def test_doctor_next_steps_remind_user_to_keep_custom_profile_options(self):
+        result={'ready':False,'enabled':True,'installed':True,'uiTransportDiscovered':False,
+                'agentcontroller':{'registered':True},'runtime':{**runtime(),'hookDefinitionsMatch':True}}
+        code,text,_=self.invoke(doctor,['--codex-home','synthetic profile with spaces','--cwd','synthetic workspace'],result)
+        self.assertEqual(code,2)
+        self.assertIn('Reuse any --codex-home, --codex-command and --cwd options',text)
 
 
 if __name__ == '__main__':

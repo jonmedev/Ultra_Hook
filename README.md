@@ -14,13 +14,19 @@ measured superiority over vanilla Codex.
 Requires Python 3.11+, Node.js 18+ and a Codex CLI with plugin and app-server support.
 Install and sign in to Codex separately. No API keys belong in this repository.
 
-Download and extract the source ZIP, or clone this repository. From its root:
+Download a versioned ZIP from [Releases](https://github.com/jonmedev/Ultra_Hook/releases),
+[verify it](SECURITY.md#verify-a-download), and extract it into a directory you will
+keep. Open a terminal in its root (or use a checkout of the reviewed tag):
 
 ```sh
 python -B scripts/install.py --dry-run
 python -B scripts/install.py
-python -B scripts/doctor.py --json
+python -B scripts/doctor.py
 ```
+
+On macOS/Linux, use `python3`; on Windows, `py -3` also works if it selects Python
+3.11+. The [getting started guide](docs/GETTING_STARTED.md) covers prerequisites,
+profiles, activation, examples, troubleshooting and upgrades.
 
 The installer uses Codex's supported marketplace/plugin commands. It does not
 replace your model, effort, permissions, global instructions or unrelated plugins.
@@ -32,9 +38,13 @@ trust them. Installation is not hook approval: the doctor reports pending trust,
 and no script writes trusted hashes or bypasses the native review. Start a new
 session to refresh the skills and tool catalog.
 
+Doctor returns **0** for ready plugin metadata, **2** for pending readiness and
+**1** for an error. Add `--json` to install, doctor or uninstall for automation.
+An install success does not mean hooks are trusted or a UI has been tested.
+
 Read the [security policy and limits](SECURITY.md). Version 0.1.1 fixes an unsupported
 hook response used in 0.1.0; update before relying on secret-access denials. For an
-owned 0.1.0 installation, uninstall it from its original directory, keep your
+owned older installation, uninstall it from its original directory, keep your
 backup/receipt, and install the new version from a separate extracted directory.
 Review source changes even when hook definitions have not changed.
 
@@ -57,7 +67,7 @@ python -B scripts/install.py --agentcontroller-command /absolute/path/to/agentco
 On Windows, the optional source builder requires Git and the .NET 9 SDK:
 
 ```sh
-python -B scripts/setup_agentcontroller.py --build-windows --destination ./local-agentcontroller
+python -B scripts/setup_agentcontroller.py --build-windows --destination ../ultra-agentcontroller
 ```
 
 Choose a destination outside this repository when preparing a contribution or a
@@ -82,6 +92,18 @@ python -B scripts/doctor.py --json --check-agentcontroller
 ```
 
 ## Use
+
+In a new Codex session:
+
+```text
+$ultra-hook Fix the importer dropping its last row. Reproduce it, preserve the
+public API and verify the original input after the fix.
+```
+
+For substantial work, the skill establishes a completion check, selects relevant
+engineering or research guidance, and coordinates only useful authorized work.
+Give task-specific limits in your request, such as read-only review, no subagents,
+allowed model efforts or no publication. See [more examples](docs/GETTING_STARTED.md#5-give-the-skill-a-real-task).
 
 - Invoke `$ultra-hook` for a substantial implementation, architecture, review or
   research task. Normal skill discovery can also select it for a matching request.
@@ -150,3 +172,6 @@ hook review follows [Codex hook documentation](https://learn.chatgpt.com/docs/ho
 GitHub distribution is distinct from submission to the universal plugin directory,
 whose [submission restrictions](https://developers.openai.com/plugins/deploy/submission)
 currently exclude plugin ZIPs containing lifecycle hooks.
+
+The [K-stack comparison](docs/KSTACK_COMPARISON.md) records the inspected upstream
+revision, useful adaptations and Claude-specific behavior deliberately not imported.

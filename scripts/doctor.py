@@ -10,7 +10,7 @@ import sys
 import threading
 import time
 from collections import Counter
-from install import CLI, InstallError, PLUGIN, REPO, SERVER, codex_home, load_config, plugin_catalog, marketplaces, stop_process, check_package, guard_path, private_bytes
+from install import CLI, InstallError, PLUGIN, REPO, SERVER, codex_home, load_config, plugin_catalog, marketplaces, stop_process, check_package, guard_path, private_bytes, emit_result, OutputParser
 
 EXPECTED_SKILLS = {'ultra-hook:ultra-hook', 'ultra-hook:agentcontroller'}
 
@@ -246,22 +246,22 @@ def inspect(cli, cwd=REPO, *, check_agentcontroller=False):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = OutputParser(description=__doc__)
     parser.add_argument('--codex-home')
     parser.add_argument('--codex-command')
     parser.add_argument('--cwd', type=Path, default=REPO)
-    parser.add_argument('--json', action='store_true', help='Emit safe JSON metadata (also the default).')
+    parser.add_argument('--json', action='store_true', help='Emit safe JSON only, for automation (default: readable summary).')
     parser.add_argument('--check-agentcontroller', action='store_true', help='Explicitly start only a reviewed local AgentController stdio registration for metadata.')
     args = parser.parse_args()
     try:
         result = inspect(CLI(codex_home(args.codex_home), args.codex_command), args.cwd, check_agentcontroller=args.check_agentcontroller)
-        print(json.dumps(result, indent=2))
+        emit_result('doctor', result, json_output=args.json)
         return 0 if result['ready'] else 2
     except InstallError as exc:
-        print(json.dumps({'status': 'error', 'message': str(exc)}), file=sys.stderr)
+        emit_result('doctor', {'status': 'error', 'message': str(exc)}, json_output=args.json, stream=sys.stderr)
         return 1
     except (OSError, ValueError, TypeError, KeyError, AttributeError):
-        print(json.dumps({'status': 'error', 'message': 'Inspection failed; private diagnostics withheld.'}), file=sys.stderr)
+        emit_result('doctor', {'status': 'error', 'message': 'Inspection failed; private diagnostics withheld.'}, json_output=args.json, stream=sys.stderr)
         return 1
 
 

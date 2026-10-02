@@ -11,14 +11,16 @@
    audit, verify the SHA-256, and install from that extracted copy in a fresh Codex
    home with spaces in its path. Test installation twice and uninstall. Hook trust
    remains a real user review step. An untrusted hook must stay pending.
-4. Perform the relevant AgentController UI check on a supported target. Retain
-   evidence locally. Publish screenshots only if deliberately created for public
-   use and reviewed for personal content. CLI tests are not a desktop QA pass.
+4. When a UI surface changed, perform the relevant AgentController check on a
+   supported target and retain evidence locally. Otherwise state why UI QA is
+   not applicable and exercise the affected CLI/API/library. Publish screenshots
+   only if deliberately created for public use and reviewed for personal content.
+   CLI tests are not a desktop QA pass.
 5. Review the first commit's public author identity and the exact files to publish.
    Publishing requires the maintainer's explicit decision; preparing this repository
    does not itself push commits, create tags or publish a release.
 6. Once publication is authorized, push the reviewed commits and an annotated
-   version tag such as `v0.1.0`. The tag workflow reruns CI and verifies that the tag
+   version tag such as `v0.1.2`. The tag workflow reruns CI and verifies that the tag
    matches the manifest before creating the GitHub release with ZIP and checksum.
    It also signs build provenance. Download the published archive, verify its
    attestation against the expected repository/workflow/tag, compare its bytes with

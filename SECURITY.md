@@ -65,10 +65,20 @@ screenshots privately; do not capture unrelated applications.
 ## Verify a download
 
 Download the versioned ZIP and checksum from this repository's GitHub Releases.
-Compare the checksum, then verify the signed provenance with GitHub CLI:
+Compare the checksum. In PowerShell, from the download directory:
+
+```powershell
+$actual = (Get-FileHash -Algorithm SHA256 ./ultra-hook-0.1.2.zip).Hash.ToLowerInvariant()
+$expected = ((Get-Content ./ultra-hook-0.1.2.sha256 -Raw).Trim() -split '\s+')[0]
+if ($actual -ne $expected) { throw 'Checksum mismatch: do not install.' }
+```
+
+On Linux use `sha256sum -c ultra-hook-0.1.2.sha256`; on macOS use
+`shasum -a 256 -c ultra-hook-0.1.2.sha256`. A matching checksum alone does not
+authenticate its publisher. Verify signed provenance with GitHub CLI:
 
 ```sh
-gh attestation verify ultra-hook-0.1.1.zip --repo jonmedev/Ultra_Hook --signer-workflow jonmedev/Ultra_Hook/.github/workflows/release.yml --source-ref refs/tags/v0.1.1 --deny-self-hosted-runners
+gh attestation verify ultra-hook-0.1.2.zip --repo jonmedev/Ultra_Hook --signer-workflow jonmedev/Ultra_Hook/.github/workflows/release.yml --source-ref refs/tags/v0.1.2 --deny-self-hosted-runners
 ```
 
 This checks artifact identity and the expected repository, workflow and tag.

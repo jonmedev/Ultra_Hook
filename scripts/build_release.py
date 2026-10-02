@@ -34,6 +34,8 @@ NOTICE
 README.md
 SECURITY.md
 docs/MIGRATION.md
+docs/GETTING_STARTED.md
+docs/KSTACK_COMPARISON.md
 docs/RELEASING.md
 plugins/ultra-hook/.codex-plugin/plugin.json
 plugins/ultra-hook/hooks/hook-io.cjs

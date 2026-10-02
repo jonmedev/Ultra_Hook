@@ -432,9 +432,18 @@ def install(repo, home, cli, *, dry_run=False, agentcontroller_command=None, rep
         old_receipt = json.loads(receipt_bytes) if receipt_bytes is not None else {}
         if not isinstance(old_receipt, dict):
             raise InstallError('Invalid installation receipt; private data withheld.')
-        if old_receipt and (old_receipt.get('plugin') != PLUGIN or not old_receipt.get('repo')
-                            or not same_path(old_receipt['repo'], repo)):
+        terminal_receipt = (old_receipt.get('plugin') == PLUGIN and old_receipt.get('uninstalled') is True
+                            and all(old_receipt.get(key) is False for key in
+                                    ('createdPlugin', 'createdMarketplace', 'createdMcp', 'disabledCas')))
+        if receipt_bytes is not None and not terminal_receipt and (
+                old_receipt.get('plugin') != PLUGIN or not old_receipt.get('repo')
+                or not same_path(old_receipt['repo'], repo)):
             raise InstallError('Existing installation receipt belongs to a different source; refusing to reuse it.')
+        if terminal_receipt:
+            write_private(transaction / 'receipt.json', receipt_bytes, expected=None)
+            # A completed uninstall has no ownership to carry into a new
+            # installation, even if its source directory happens to be the same.
+            old_receipt = {}
         owned = {'plugin': bool(old_receipt.get('createdPlugin')) or not bool(installed),
                  'marketplace': bool(old_receipt.get('createdMarketplace')) or not bool(market),
                  'mcp': bool(old_receipt.get('createdMcp')) or controller['add']}
@@ -533,9 +542,108 @@ def install(repo, home, cli, *, dry_run=False, agentcontroller_command=None, rep
                                ('. ' + '; '.join(errors) if errors else '')) from exc
 
 
+def action_description(command):
+    labels = {('plugin', 'marketplace', 'add'): 'Register the local Ultra Hook marketplace.',
+              ('plugin', 'marketplace', 'remove'): 'Remove the owned Ultra Hook marketplace registration.',
+              ('plugin', 'add'): 'Install or enable Ultra Hook.',
+              ('plugin', 'remove'): 'Remove the owned Ultra Hook plugin registration.',
+              ('mcp', 'add'): 'Register the supplied AgentController launcher.',
+              ('mcp', 'remove'): 'Remove the owned AgentController MCP registration.'}
+    for tokens, label in labels.items():
+        if any(tuple(command[index:index + len(tokens)]) == tokens for index in range(len(command))):
+            return label
+    return 'Apply an owned registration change.'
+
+
+def runtime_guidance(runtime):
+    if runtime.get('hooksReady') and runtime.get('skillsReady'):
+        return ['Hooks: 5/5 trusted; both skills are available.',
+                'Next: ask Codex to use the Ultra Hook skill for your task.']
+    if runtime.get('hookDefinitionsMatch') is False or runtime.get('metadataErrors'):
+        return ['Runtime definitions could not be verified. Compare the installed package before granting hook trust.',
+                'Next: run python -B scripts/doctor.py, reusing your profile and CLI options.']
+    if runtime.get('hookDefinitionsMatch') and runtime.get('hookCount') == 5 and not runtime.get('hooksReady'):
+        return ['Hook trust is pending. In Codex, open /hooks and review the five Ultra Hook definitions.',
+                'Next: run python -B scripts/doctor.py after your review, reusing your profile and CLI options.']
+    return ['Runtime verification is pending.', 'Next: run python -B scripts/doctor.py, reusing your profile and CLI options.']
+
+
+def human_result(operation, result):
+    """Render only the existing safe result fields; no new inspection/actions."""
+    if result.get('status') == 'error':
+        next_step = ('Check the Codex CLI/profile setup in README.md, then rerun doctor.' if operation == 'doctor'
+                     else 'Review the reported issue; use --dry-run to inspect the plan before retrying.')
+        return 'Error: ' + result['message'] + '\nNext: ' + next_step + '\nKeep the same profile and CLI options when retrying.'
+    if result.get('status') == 'plan':
+        lines = ['Ultra Hook ' + ('installation' if operation == 'install' else 'removal') + ' plan']
+        if result.get('codexHome'):
+            lines.append('Profile: ' + result['codexHome'])
+        commands = result.get('commands', [])
+        lines.extend(f'{index}. {action_description(command)}' for index, command in enumerate(commands, 1))
+        if not commands:
+            lines.append('No registration changes are needed.')
+        if result.get('restoreCas'):
+            lines.append('Restore CAS if this installation disabled it.')
+        if result.get('replaceCasRequested') and result.get('casDetected'):
+            lines.append('CAS migration requested; disabling CAS requires verified runtime definitions and trusted hooks.')
+        lines.append('Plan only; no changes made.')
+        lines.append(f'Next: rerun scripts/{operation}.py with the same options, without --dry-run.')
+        return '\n'.join(lines)
+    if operation == 'uninstall':
+        return 'Ultra Hook cleanup completed.\n' + result['message']
+    if operation == 'install':
+        lines = ['Ultra Hook ' + str(result['version']) + ' is installed and enabled.',
+                 'Profile: ' + result['codexHome']]
+        if not result.get('commands'):
+            lines.append('Already installed; no registration changes were needed.')
+        lines.extend(runtime_guidance(result.get('runtime', {})))
+        if result.get('migrationPending'):
+            lines.append('CAS migration is pending; CAS remains enabled. Complete runtime verification and hook trust, then rerun with --replace-cas.')
+        if not result.get('agentcontroller', {}).get('registered') and not result.get('agentcontroller', {}).get('willRegister'):
+            lines.append('AgentController is not registered. Installation works without it; UI validation requires its setup in README.md.')
+        else:
+            lines.append('AgentController is registered. Registration alone does not validate UI behavior.')
+        return '\n'.join(lines)
+    runtime = result.get('runtime', {})
+    lines = ['Ultra Hook: ' + ('ready' if result.get('ready') else 'needs attention'),
+             'Plugin: ' + ('enabled' if result.get('enabled') else 'disabled' if result.get('installed') else 'not installed')
+             + (' (version ' + str(result['version']) + ')' if result.get('version') else ''),
+             f"Hooks: {runtime.get('trustedHookCount', 0)}/5 trusted; {runtime.get('hookCount', 0)} loaded.",
+             f"Skills: {runtime.get('skillCount', 0)}/2 loaded" + ('; expected names verified.' if runtime.get('skillsReady') else '; verification pending.')]
+    if not result.get('installed') or not result.get('enabled'):
+        lines.append('Next: run python -B scripts/install.py to install or enable the plugin, reusing your profile and CLI options.')
+    else:
+        lines.extend(runtime_guidance(runtime))
+    if result.get('uiTransportDiscovered'):
+        count = runtime.get('agentcontrollerRuntime', {}).get('toolCount', 0)
+        lines.append(f'AgentController: {count} tools discovered. UI behavior has not been tested.')
+    elif result.get('agentcontrollerCheckRequested'):
+        lines.append('AgentController transport was not discovered. Check its setup and registered launcher; UI behavior has not been tested.')
+    elif result.get('agentcontroller', {}).get('registered'):
+        lines.append('AgentController is registered; transport was not checked. To opt in: python -B scripts/doctor.py --check-agentcontroller, reusing your profile, CLI and --cwd options.')
+    else:
+        lines.append('AgentController is not registered. UI validation requires its setup in README.md.')
+    lines.append('Reuse any --codex-home, --codex-command and --cwd options when rerunning doctor; do not switch profiles accidentally.')
+    return '\n'.join(lines)
+
+
+def emit_result(operation, result, *, json_output=False, stream=None):
+    print(json.dumps(result, indent=2) if json_output else human_result(operation, result), file=stream or sys.stdout)
+
+
+class OutputParser(argparse.ArgumentParser):
+    def error(self, message):
+        # Do not echo invalid arguments: a mistyped argument can contain private
+        # text. Preserve argparse's exit code while keeping automation JSON clean.
+        if '--json' in sys.argv[1:]:
+            self.exit(2, json.dumps({'status':'error','message':'Invalid command-line options. Run with --help.'}) + '\n')
+        super().error('Invalid command-line options. Run with --help.')
+
+
 def parser():
-    result = argparse.ArgumentParser(description=__doc__)
+    result = OutputParser(description=__doc__)
     result.add_argument('--dry-run', action='store_true', help='Read-only plan; no installation.')
+    result.add_argument('--json', action='store_true', help='Emit safe JSON only, for automation (default: readable summary).')
     result.add_argument('--codex-home', help='Explicit Codex profile directory (use synthetic directories for tests).')
     result.add_argument('--codex-command', help='Existing Codex executable path.')
     result.add_argument('--agentcontroller-command', help='Existing AgentController stdio launcher; never overwritten.')
@@ -549,13 +657,13 @@ def main():
         home = codex_home(args.codex_home)
         result = install(REPO, home, CLI(home, args.codex_command), dry_run=args.dry_run,
                          agentcontroller_command=args.agentcontroller_command, replace_cas=args.replace_cas)
-        print(json.dumps(result, indent=2))
+        emit_result('install', result, json_output=args.json)
         return 0
     except InstallError as exc:
-        print(json.dumps({'status': 'error', 'message': str(exc)}), file=sys.stderr)
+        emit_result('install', {'status': 'error', 'message': str(exc)}, json_output=args.json, stream=sys.stderr)
         return 1
     except (OSError, ValueError, TypeError, KeyError, AttributeError):
-        print(json.dumps({'status': 'error', 'message': 'Installation failed; private diagnostics withheld.'}), file=sys.stderr)
+        emit_result('install', {'status': 'error', 'message': 'Installation failed; private diagnostics withheld.'}, json_output=args.json, stream=sys.stderr)
         return 1
 
 

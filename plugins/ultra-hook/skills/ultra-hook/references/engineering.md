@@ -11,6 +11,12 @@ have a consequential unknown, identify the smallest experiment that can distingu
 them. Split implementation after its boundaries are clear. A lead can perform design,
 editing and integration directly; crossing files does not itself require an architect.
 
+For a feature, settle the success path and an important failure path before splitting
+work. Identify callers, compatibility constraints and the shared interface. A compact
+plan is enough when those choices are clear; produce a separate design artifact only
+when it helps implementation or review. For a refactor, name what must remain
+observable before changing structure and avoid mixing unrelated behavior changes.
+
 ## Diagnosis
 
 Tie a proposed fix to an observed failure and a falsifiable explanation. Use a relevant
@@ -19,6 +25,11 @@ should change the hypothesis or expose a missing prerequisite before another att
 Check the original failing behavior after the fix, then the regressions implicated by
 the change. If the original environment cannot be exercised, state what remains unverified.
 
+Start an unfamiliar regression with the relevant callers, recent changes and observed
+inputs. Use instrumentation or a synthetic reproduction when appropriate, labeling
+the latter as such. Stop repeating a failed premise: identify what the result ruled
+out before choosing the next probe. Preserve the original acceptance condition.
+
 ## Review and security
 
 Select review areas from the actual diff and risk. A useful finding identifies a
@@ -26,6 +37,11 @@ location, triggering condition, consequence and supporting evidence. Discuss unc
 findings with the implementer and lead; reviewer agreement is not a correctness test.
 Independent review is valuable for consequential uncertainty, not as a fixed reviewer
 count. A review request does not authorize unrelated refactoring or publishing changes.
+
+Prioritize findings by demonstrated impact. Verify consequential claims against the
+code or a reproduction before acting; group related fixes and give the existing
+implementer the evidence. Disagreement can expose a missing assumption. Reviewer
+agreement or a reported model name is not independent proof of correctness.
 
 For an authorized security review, establish which code, dependencies and configuration
 are in scope. Report confirmed exposure with minimal evidence and avoid copying secrets
