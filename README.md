@@ -1,7 +1,29 @@
 # Ultra Hook
 
-Native Codex teamwork with proportionate model selection, continuing teammate
-conversations and AgentController-based UI validation. Small tasks stay direct.
+Native Codex teamwork with proportionate model selection and continuing teammate
+conversations. Small tasks stay direct. For UI validation, Ultra Hook integrates
+**[AgentController by Kasempiternal](https://github.com/Kasempiternal/agentcontroller)**,
+an independent third-party project. AgentController is not developed or distributed
+by Ultra Hook; this repository provides the Codex integration skill.
+
+**[Download Ultra Hook](https://github.com/jonmedev/Ultra_Hook/releases/latest)** ·
+**[Installation guide](docs/GETTING_STARTED.md)** ·
+**[AgentController downloads (Kasempiternal)](https://github.com/Kasempiternal/agentcontroller/releases)** ·
+**[Usage examples](docs/GETTING_STARTED.md#5-give-the-skill-a-real-task)**
+
+## Downloads
+
+| What you need | Download / instructions | Maintainer |
+| --- | --- | --- |
+| Ultra Hook 0.1.3 plugin | [ZIP](https://github.com/jonmedev/Ultra_Hook/releases/download/v0.1.3/ultra-hook-0.1.3.zip) · [SHA-256](https://github.com/jonmedev/Ultra_Hook/releases/download/v0.1.3/ultra-hook-0.1.3.sha256) · [Verify](SECURITY.md#verify-a-download) | This repository |
+| AgentController for macOS | [Official downloads](https://github.com/Kasempiternal/agentcontroller/releases) · [2.5.0 DMG](https://github.com/Kasempiternal/agentcontroller/releases/download/v2.5.0/AgentController-2.5.0.dmg) | Kasempiternal |
+| AgentController for Windows | [Upstream build/setup guide](https://github.com/Kasempiternal/agentcontroller/blob/master/Windows/README.md) · [Source](https://github.com/Kasempiternal/agentcontroller/archive/refs/tags/v2.5.0.zip) | Kasempiternal |
+| AgentController for Linux | [Upstream installation guide](https://github.com/Kasempiternal/agentcontroller/blob/master/Linux/README.md) · [Source](https://github.com/Kasempiternal/agentcontroller/archive/refs/tags/v2.5.0.zip) | Kasempiternal |
+
+AgentController is optional for installing Ultra Hook and required for its UI
+validation workflow. As checked on 2026-10-02, upstream 2.5.0 publishes a macOS DMG;
+Windows/Linux use upstream source installation. Check the upstream releases for
+later platform assets. The Ultra Hook ZIP contains no AgentController binary.
 
 This is a portable plugin with two skills and five compact lifecycle hooks. It
 preserves your chosen leader, model settings and native permissions. It has no
@@ -55,6 +77,12 @@ See [migration](docs/MIGRATION.md) for the consolidated workflows.
 
 ## Set up AgentController for UI work
 
+**AgentController belongs to [Kasempiternal](https://github.com/Kasempiternal), not
+Ultra Hook.** Get it from the [upstream releases](https://github.com/Kasempiternal/agentcontroller/releases)
+and follow the [upstream installation guide](https://github.com/Kasempiternal/agentcontroller#installation).
+Our `$agentcontroller` skill supplies Codex usage and validation guidance for that
+external tool; it is not the application itself.
+
 The plugin requires actual AgentController evidence when validating UI/app flows.
 Installation of the skills does not install a desktop controller or grant app access.
 
@@ -74,6 +102,9 @@ Choose a destination outside this repository when preparing a contribution or a
 release. Register the resulting executable with `--agentcontroller-command`.
 The builder pins the upstream source revision and preserves dependency licenses;
 the release archive contains no machine-specific controller binary.
+It builds the previously reviewed revision `bc6db97122d6adf07342d3efc87e7ac7c96b4889`
+(2.4.2 source), not the latest upstream release. Use upstream instructions if you
+want another version and validate its actual capabilities before relying on them.
 
 For other platforms, install the appropriate upstream
 [AgentController backend](https://github.com/Kasempiternal/agentcontroller) and verify

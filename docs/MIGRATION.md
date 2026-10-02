@@ -4,7 +4,9 @@ Ultra Hook consolidates the earlier CAS workflow collection into two public skil
 
 - **ultra-hook** chooses a proportionate engineering or research workflow and coordinates
   native Codex teammates when authorized and useful.
-- **agentcontroller** validates application and web UI through AgentController.
+- **agentcontroller** is our integration skill for application and web UI validation
+  with [AgentController by Kasempiternal](https://github.com/Kasempiternal/agentcontroller).
+  Install the external application from its [upstream downloads/setup](https://github.com/Kasempiternal/agentcontroller/releases).
 
 Use the installation instructions in the [project README](../README.md). This release
 does not rewrite existing personal instructions, select a new leader model, migrate

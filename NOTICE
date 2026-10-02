@@ -16,7 +16,10 @@ K-stack informed the workflow comparison and consolidation:
 https://github.com/Kasempiternal/K-stack
 The public skill guidance was independently rewritten for native Codex workflows.
 
-AgentController is a separate dependency, not bundled in this source archive:
+AgentController is developed and maintained by Kasempiternal, independently of
+Ultra Hook. Our AgentController skill and source-build helper are integration
+tooling, not authorship of the controller. It is not bundled in this source archive:
 https://github.com/Kasempiternal/agentcontroller
+Official upstream downloads: https://github.com/Kasempiternal/agentcontroller/releases
 Its own license and notices accompany any explicit source build. Installing Ultra
 Hook does not grant additional rights to dependencies or imply upstream endorsement.

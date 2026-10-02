@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Opt-in Windows AgentController source build; does not register MCP or launch UI."""
+"""Ultra Hook helper to build Kasempiternal's AgentController from pinned source; does not register MCP or launch UI."""
 import argparse
 import hashlib
 import json
@@ -136,7 +136,7 @@ def build(destination, runtime='win-x64', *, enabled=False, dotnet_command=None)
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, epilog='Official upstream downloads: https://github.com/Kasempiternal/agentcontroller/releases')
     parser.add_argument('--destination', type=Path, required=True)
     parser.add_argument('--runtime', choices=('win-x64', 'win-arm64'), default='win-x64')
     parser.add_argument('--build-windows', action='store_true', help='Explicitly fetch pinned source and build with .NET 9.')

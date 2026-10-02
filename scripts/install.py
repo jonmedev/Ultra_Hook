@@ -23,6 +23,7 @@ PLUGIN = 'ultra-hook@ultra-hook'
 MARKETPLACE = 'ultra-hook'
 CAS = 'cas@claude-agent-system'
 SERVER = 'agentcontroller'
+CONTROLLER_DOWNLOADS = 'https://github.com/Kasempiternal/agentcontroller/releases'
 REPO = Path(__file__).resolve().parents[1]
 MAX_CONFIG_BYTES = 8 * 1024 * 1024
 MAX_RECEIPT_BYTES = 256 * 1024
@@ -603,6 +604,7 @@ def human_result(operation, result):
             lines.append('AgentController is not registered. Installation works without it; UI validation requires its setup in README.md.')
         else:
             lines.append('AgentController is registered. Registration alone does not validate UI behavior.')
+        lines.append('AgentController by Kasempiternal (external dependency). Downloads: ' + CONTROLLER_DOWNLOADS)
         return '\n'.join(lines)
     runtime = result.get('runtime', {})
     lines = ['Ultra Hook: ' + ('ready' if result.get('ready') else 'needs attention'),
@@ -624,6 +626,7 @@ def human_result(operation, result):
     else:
         lines.append('AgentController is not registered. UI validation requires its setup in README.md.')
     lines.append('Reuse any --codex-home, --codex-command and --cwd options when rerunning doctor; do not switch profiles accidentally.')
+    lines.append('AgentController by Kasempiternal (external dependency). Downloads: ' + CONTROLLER_DOWNLOADS)
     return '\n'.join(lines)
 
 
@@ -641,7 +644,7 @@ class OutputParser(argparse.ArgumentParser):
 
 
 def parser():
-    result = OutputParser(description=__doc__)
+    result = OutputParser(description=__doc__, epilog='AgentController is by Kasempiternal. Downloads: ' + CONTROLLER_DOWNLOADS)
     result.add_argument('--dry-run', action='store_true', help='Read-only plan; no installation.')
     result.add_argument('--json', action='store_true', help='Emit safe JSON only, for automation (default: readable summary).')
     result.add_argument('--codex-home', help='Explicit Codex profile directory (use synthetic directories for tests).')

@@ -1,9 +1,16 @@
 ---
 name: agentcontroller
-description: Validate native application and web UI behavior with AgentController, the required UI validation backend for Ultra Hook. Use for UI changes and application QA; ordinary code or CLI checks remain separate.
+description: Validate UI behavior using Kasempiternal's AgentController, an external tool integrated with Ultra Hook. Use for UI changes and application QA; ordinary code or CLI checks remain separate.
 ---
 
-# AgentController UI validation
+# AgentController integration and UI validation
+
+AgentController is developed by **[Kasempiternal](https://github.com/Kasempiternal/agentcontroller)**.
+This skill is Ultra Hook's integration guidance, not the controller application.
+Use the [upstream downloads](https://github.com/Kasempiternal/agentcontroller/releases)
+and [platform setup instructions](https://github.com/Kasempiternal/agentcontroller#installation).
+When setup is missing, include those links and identify the target platform; do not
+imply that installing this skill installed the application or that Ultra Hook owns it.
 
 Use actual AgentController tools and results for UI validation. Do not present another
 browser or desktop controller as an equivalent backend. Code tests can supplement

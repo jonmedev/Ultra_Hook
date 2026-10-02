@@ -1,5 +1,11 @@
 # AgentController on Windows
 
+AgentController is [Kasempiternal's project](https://github.com/Kasempiternal/agentcontroller).
+Check [upstream releases](https://github.com/Kasempiternal/agentcontroller/releases)
+and the [Windows build/setup guide](https://github.com/Kasempiternal/agentcontroller/blob/master/Windows/README.md).
+Do not present a macOS DMG or a source ZIP as a Windows executable. Ultra Hook's
+optional source builder is separate integration tooling and uses a pinned revision.
+
 Probe the installed backend and actual target. Cross-platform tool names do not imply
 feature parity, and capability discovery does not establish that execution is routed
 to a working implementation.

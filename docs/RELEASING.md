@@ -20,7 +20,7 @@
    Publishing requires the maintainer's explicit decision; preparing this repository
    does not itself push commits, create tags or publish a release.
 6. Once publication is authorized, push the reviewed commits and an annotated
-   version tag such as `v0.1.2`. The tag workflow reruns CI and verifies that the tag
+   version tag such as `v0.1.3`. The tag workflow reruns CI and verifies that the tag
    matches the manifest before creating the GitHub release with ZIP and checksum.
    It also signs build provenance. Download the published archive, verify its
    attestation against the expected repository/workflow/tag, compare its bytes with

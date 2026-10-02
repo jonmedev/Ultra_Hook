@@ -37,6 +37,7 @@ docs/MIGRATION.md
 docs/GETTING_STARTED.md
 docs/KSTACK_COMPARISON.md
 docs/RELEASING.md
+docs/RELEASE_TEMPLATE.md
 plugins/ultra-hook/.codex-plugin/plugin.json
 plugins/ultra-hook/hooks/hook-io.cjs
 plugins/ultra-hook/hooks/hooks.json

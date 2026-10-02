@@ -43,7 +43,9 @@ Load only the reference needed for the current decision:
 - For architecture, debugging, code review or measured optimization, consult the
   relevant section of [engineering](references/engineering.md).
 - For a research assignment, read [research](references/research.md).
-- For UI behavior or visual changes, use [AgentController](../agentcontroller/SKILL.md).
+- For UI behavior or visual changes, use our [AgentController integration skill](../agentcontroller/SKILL.md)
+  for [Kasempiternal's external tool](https://github.com/Kasempiternal/agentcontroller)
+  ([upstream downloads](https://github.com/Kasempiternal/agentcontroller/releases)).
   Other checks can supplement its evidence; they do not replace required UI validation.
 
 Use native collaboration only when authorized by the request or applicable

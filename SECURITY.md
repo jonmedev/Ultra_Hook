@@ -57,7 +57,10 @@ On Windows, Python file modes do not create a private ACL. Profile confidentiali
 depends on the existing Windows ACL. The installer rejects common link redirection
 but does not claim atomic protection against a malicious same-user process.
 
-AgentController is a separate dependency with desktop access. Inspect its source,
+AgentController is a separate dependency by
+[Kasempiternal](https://github.com/Kasempiternal/agentcontroller), available through
+[upstream releases](https://github.com/Kasempiternal/agentcontroller/releases).
+Ultra Hook provides integration guidance, not the controller itself. It has desktop access. Inspect its source,
 capabilities and registration before opting in. Tool discovery does not validate a
 UI or constrain what that server could do. Retain target assertions and relevant
 screenshots privately; do not capture unrelated applications.
@@ -68,17 +71,17 @@ Download the versioned ZIP and checksum from this repository's GitHub Releases.
 Compare the checksum. In PowerShell, from the download directory:
 
 ```powershell
-$actual = (Get-FileHash -Algorithm SHA256 ./ultra-hook-0.1.2.zip).Hash.ToLowerInvariant()
-$expected = ((Get-Content ./ultra-hook-0.1.2.sha256 -Raw).Trim() -split '\s+')[0]
+$actual = (Get-FileHash -Algorithm SHA256 ./ultra-hook-0.1.3.zip).Hash.ToLowerInvariant()
+$expected = ((Get-Content ./ultra-hook-0.1.3.sha256 -Raw).Trim() -split '\s+')[0]
 if ($actual -ne $expected) { throw 'Checksum mismatch: do not install.' }
 ```
 
-On Linux use `sha256sum -c ultra-hook-0.1.2.sha256`; on macOS use
-`shasum -a 256 -c ultra-hook-0.1.2.sha256`. A matching checksum alone does not
+On Linux use `sha256sum -c ultra-hook-0.1.3.sha256`; on macOS use
+`shasum -a 256 -c ultra-hook-0.1.3.sha256`. A matching checksum alone does not
 authenticate its publisher. Verify signed provenance with GitHub CLI:
 
 ```sh
-gh attestation verify ultra-hook-0.1.2.zip --repo jonmedev/Ultra_Hook --signer-workflow jonmedev/Ultra_Hook/.github/workflows/release.yml --source-ref refs/tags/v0.1.2 --deny-self-hosted-runners
+gh attestation verify ultra-hook-0.1.3.zip --repo jonmedev/Ultra_Hook --signer-workflow jonmedev/Ultra_Hook/.github/workflows/release.yml --source-ref refs/tags/v0.1.3 --deny-self-hosted-runners
 ```
 
 This checks artifact identity and the expected repository, workflow and tag.

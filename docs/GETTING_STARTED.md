@@ -1,5 +1,11 @@
 # Install, activate and use Ultra Hook
 
+**[Ultra Hook download](https://github.com/jonmedev/Ultra_Hook/releases/latest)** ·
+**[AgentController downloads by Kasempiternal](https://github.com/Kasempiternal/agentcontroller/releases)**
+
+Ultra Hook is the Codex plugin. AgentController is Kasempiternal's separate desktop
+automation project; our integration skill does not include or claim authorship of it.
+
 ## 1. Check prerequisites
 
 Install Python 3.11+, Node.js 18+ and a signed-in Codex CLI with `plugin` and
@@ -125,6 +131,14 @@ required. See [teams and models](../plugins/ultra-hook/skills/ultra-hook/referen
 
 ## Optional: enable AgentController for UI work
 
+Download AgentController from **[Kasempiternal's releases](https://github.com/Kasempiternal/agentcontroller/releases)**.
+The published 2.5.0 asset is a [macOS DMG](https://github.com/Kasempiternal/agentcontroller/releases/download/v2.5.0/AgentController-2.5.0.dmg).
+For Windows, use the [upstream Windows guide](https://github.com/Kasempiternal/agentcontroller/blob/master/Windows/README.md);
+for Linux, the [upstream Linux guide](https://github.com/Kasempiternal/agentcontroller/blob/master/Linux/README.md).
+[Source download](https://github.com/Kasempiternal/agentcontroller/archive/refs/tags/v2.5.0.zip)
+is source code, not a ready-to-run Windows executable. Check release assets for newer
+versions and platform support. Ultra Hook does not rehost these downloads.
+
 If you already have a reviewed local stdio executable:
 
 ```sh
@@ -138,6 +152,11 @@ conflicting registration is not overwritten. Avoid wrapper commands that inject
 unreviewed context or credentials.
 
 Windows can build the pinned upstream source with Git and .NET 9 SDK:
+
+The helper builds reviewed AgentController 2.4.2 source at
+`bc6db97122d6adf07342d3efc87e7ac7c96b4889`; it does not track the latest release.
+It is an Ultra Hook build helper for Kasempiternal's code, not an official upstream
+installer. To build a different version, follow upstream's platform instructions.
 
 ```powershell
 python -B scripts/setup_agentcontroller.py --build-windows --destination ../ultra-agentcontroller

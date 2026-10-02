@@ -43,4 +43,6 @@ jobs:
       - name: Publish tag artifacts
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$RELEASE_TAG" "$RUNNER_TEMP/ultra-hook-release/"*.zip "$RUNNER_TEMP/ultra-hook-release/"*.sha256 --verify-tag --generate-notes --title "Ultra Hook $RELEASE_TAG"
+        run: |
+          python -B -c 'import os; from pathlib import Path; template=Path("docs/RELEASE_TEMPLATE.md").read_text(); (Path(os.environ["RUNNER_TEMP"])/"ultra-hook-release-notes.md").write_text(template.replace("__VERSION__",os.environ["RELEASE_TAG"][1:]))'
+          gh release create "$RELEASE_TAG" "$RUNNER_TEMP/ultra-hook-release/"*.zip "$RUNNER_TEMP/ultra-hook-release/"*.sha256 --verify-tag --notes-file "$RUNNER_TEMP/ultra-hook-release-notes.md" --title "Ultra Hook $RELEASE_TAG"
