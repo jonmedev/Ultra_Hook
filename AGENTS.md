@@ -14,6 +14,8 @@ Claude Code loads the repository root as the plugin through `.claude-plugin`, wi
 hook files on the same script set and never add a root `hooks/` directory.
 
 Keep skills concise and role-based; no fixed teams or implicit maximum-effort loops.
+Modes cap agents per prompt and must fail open: a state error leaves advice, never a
+blocked spawn. Session state holds counters only, never prompt or tool text.
 Any change to packaging must pass the release audit and isolated installation tests.
 Test with `python -B -m unittest discover -s tests` and the Node tests under
 `plugins/ultra-hook/hooks/tests`. Build only allowlisted release inputs.

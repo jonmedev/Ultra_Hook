@@ -10,7 +10,7 @@ has its own plugin-only commands and differences.
 
 ## Install the complete setup
 
-Download the [setup ZIP](https://github.com/jonmedev/Ultra_Hook/releases/download/v0.3.0/ultra-hook-0.3.0.zip),
+Download the [setup ZIP](https://github.com/jonmedev/Ultra_Hook/releases/download/v0.4.0/ultra-hook-0.4.0.zip),
 [verify it](../SECURITY.md#verify-a-download), and extract it into a permanent folder.
 On Windows double-click `Install.cmd`; on macOS/Linux run `sh install.sh` there.
 Both launchers run the same supported command:
@@ -55,7 +55,7 @@ For an existing Ultra Hook/CAS installation, read [updates](#update-or-remove) f
 Open **PowerShell on Windows** or **Terminal on macOS/Linux**, then run each line:
 
 ```sh
-codex plugin marketplace add jonmedev/Ultra_Hook --ref v0.3.0
+codex plugin marketplace add jonmedev/Ultra_Hook --ref v0.4.0
 codex plugin add ultra-hook@ultra-hook
 ```
 
@@ -81,9 +81,10 @@ $ultra-hook Review this branch for data loss. Report evidence and affected
 locations; do not edit files or publish anything.
 ```
 
-For direct work, add `without subagents`. For native teamwork, describe the outcome
-and allow useful independent work; workers discuss findings with the lead. The
-skill does not force a team or maximum reasoning for every request.
+Each prompt gets a [work mode](../README.md#work-modes) from its task: `direct`,
+`fast`, `deep` or `team`, each with a cap on agents per prompt. Name one to fix it
+(`mode fast`, `$ultra-hook deep ...`), or add `without subagents` for direct work.
+The skill does not force a team or maximum reasoning for every request.
 
 Use `$ultra-hook:ultra-hook` if the short name is ambiguous. To inspect installation:
 

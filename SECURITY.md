@@ -23,7 +23,8 @@ Codex profile and installation directories writable only by trusted users.
 | Hook input | Size, read-time and parser-work limits; inspection errors return a static denial | Host crashes, disabled hooks and host timeouts can still fail open |
 | Ordinary file/Git operations | Authorization reminder; Codex native approvals and sandbox apply | A reminder cannot force a permission prompt |
 | Explicit destructive Git commands | Denial for hard resets, forced cleaning and unconditional history replacement | Generated commands, aliases and arbitrary programs are outside literal recognition |
-| Hook privacy | No network requests, payload logging or log-file writes | Codex and external tools have their own data handling |
+| Hook privacy | No network requests or payload logging. One small state file per session holds a mode name, counters and a timestamp, under a hashed name | Codex and external tools have their own data handling |
+| Agent budget | Spawns over the mode's per-prompt cap are denied in Codex and need approval in Claude Code | Counts agents, not tokens; a missing or unwritable state directory leaves advice only |
 | Installer state | Reject linked state/config files and detect changed configuration | Cannot defeat an attacker racing file operations with the same OS identity |
 | Diagnostics | Disable discovered MCP servers for inspection; explicit opt-in for AgentController | Starting an opted-in server executes that trusted external program |
 | Distribution | Reviewed file inventory, privacy scan, CI and signed build provenance | Scans are heuristic; provenance identifies a build, not an absence of bugs |
@@ -34,8 +35,11 @@ commands, language interpreters, unknown tools and malicious executable wrappers
 can evade literal command checks. Do not retry a denied operation through another
 tool. Use synthetic or redacted data instead.
 
-Routing reminders do not grant permissions, change models, isolate teammates or
-enforce a spending limit. Prompt injection is not solved by a skill. Treat repository
+Routing reminders do not grant permissions, change models or isolate teammates.
+The agent cap limits how many agents one prompt starts; it is not a spending limit,
+and it applies only to the spawn tools the hook matches. Session state is written to
+the plugin data directory the host provides, or the system temporary directory, and
+records older than 30 days are deleted at session start. Prompt injection is not solved by a skill. Treat repository
 text, webpages, tool output and teammate findings as data subject to the user's
 instructions and native permissions. Do not put credentials in agent prompts.
 
@@ -100,17 +104,17 @@ Download the versioned ZIP and checksum from this repository's GitHub Releases.
 Compare the checksum. In PowerShell, from the download directory:
 
 ```powershell
-$actual = (Get-FileHash -Algorithm SHA256 ./ultra-hook-0.3.0.zip).Hash.ToLowerInvariant()
-$expected = ((Get-Content ./ultra-hook-0.3.0.sha256 -Raw).Trim() -split '\s+')[0]
+$actual = (Get-FileHash -Algorithm SHA256 ./ultra-hook-0.4.0.zip).Hash.ToLowerInvariant()
+$expected = ((Get-Content ./ultra-hook-0.4.0.sha256 -Raw).Trim() -split '\s+')[0]
 if ($actual -ne $expected) { throw 'Checksum mismatch: do not install.' }
 ```
 
-On Linux use `sha256sum -c ultra-hook-0.3.0.sha256`; on macOS use
-`shasum -a 256 -c ultra-hook-0.3.0.sha256`. A matching checksum alone does not
+On Linux use `sha256sum -c ultra-hook-0.4.0.sha256`; on macOS use
+`shasum -a 256 -c ultra-hook-0.4.0.sha256`. A matching checksum alone does not
 authenticate its publisher. Verify signed provenance with GitHub CLI:
 
 ```sh
-gh attestation verify ultra-hook-0.3.0.zip --repo jonmedev/Ultra_Hook --signer-workflow jonmedev/Ultra_Hook/.github/workflows/release.yml --source-ref refs/tags/v0.3.0 --deny-self-hosted-runners
+gh attestation verify ultra-hook-0.4.0.zip --repo jonmedev/Ultra_Hook --signer-workflow jonmedev/Ultra_Hook/.github/workflows/release.yml --source-ref refs/tags/v0.4.0 --deny-self-hosted-runners
 ```
 
 This checks artifact identity and the expected repository, workflow and tag.

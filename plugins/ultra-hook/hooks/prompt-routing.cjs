@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 "use strict";
+// Sets the work mode for this prompt and adds its playbook when that is news.
 // A scoped reminder, never a grant of delegation or model-switching authority.
 const { readEvent, runtime } = require("./hook-io.cjs");
-const { emitContext, contextFor } = require("./model-routing.cjs");
+const { emitContext, modeText, escalationText } = require("./model-routing.cjs");
+const { beginTask, isHostNotice } = require("./session-mode.cjs");
 
 function promptKind(prompt) {
   if (typeof prompt !== "string") return null;
@@ -19,9 +21,11 @@ function promptKind(prompt) {
 module.exports = { promptKind };
 async function main() { try {
   const input = await readEvent();
-  const kind = promptKind(input.prompt);
-  if (input.hook_event_name === "UserPromptSubmit" && kind) {
-    emitContext("UserPromptSubmit", contextFor("UserPromptSubmit", kind, runtime()));
-  }
+  if (input.hook_event_name !== "UserPromptSubmit" || isHostNotice(input.prompt)) return;
+  const host = runtime();
+  const parts = [modeText(beginTask(input.session_id, input.prompt), host)];
+  if (promptKind(input.prompt) === "escalation") parts.push(escalationText(host));
+  const text = parts.filter(Boolean).join(" ");
+  if (text) emitContext("UserPromptSubmit", text);
 } catch { /* Advisory only; malformed input must not crash or authorize anything. */ } }
 if (require.main === module) main();

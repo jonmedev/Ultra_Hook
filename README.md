@@ -10,7 +10,7 @@ what differs there.
 
 ## Install Ultra Hook and AgentController together
 
-**[Download the setup ZIP](https://github.com/jonmedev/Ultra_Hook/releases/download/v0.3.0/ultra-hook-0.3.0.zip)**
+**[Download the setup ZIP](https://github.com/jonmedev/Ultra_Hook/releases/download/v0.4.0/ultra-hook-0.4.0.zip)**
 
 1. Extract it into a folder you will keep.
 2. **Windows:** double-click `Install.cmd`. **macOS/Linux:** open Terminal in that
@@ -45,7 +45,7 @@ It needs Codex CLI, Node.js and Git:
 Open **PowerShell on Windows** or **Terminal on macOS/Linux** and run each line:
 
 ```sh
-codex plugin marketplace add jonmedev/Ultra_Hook --ref v0.3.0
+codex plugin marketplace add jonmedev/Ultra_Hook --ref v0.4.0
 codex plugin add ultra-hook@ultra-hook
 ```
 
@@ -79,12 +79,38 @@ should be enabled and its five hooks approved in `/hooks`.
 | Validate an app's buttons, windows or user flows | Complete AgentController setup above, then use `$agentcontroller` |
 
 The plugin includes **two skills** (instructions Codex can follow) and **five hooks**
-(workflow reminders and checks for recognized sensitive operations). It preserves
-your lead model and native permissions. Teammates discuss findings with the lead;
+(mode selection, an agent cap and checks for recognized sensitive operations). It
+preserves your lead model and native permissions. Teammates discuss findings with the lead;
 it does not force a team or maximum reasoning for every request.
 
 Hook checks are heuristic and do not replace Codex's security settings. The plugin
 does not unlock models, enforce a spending cap or claim measured savings.
+
+## Work modes
+
+Each prompt gets a mode from its task. A hook reads the prompt, records the mode
+for the session and counts agent spawns against the mode's cap for that prompt.
+
+| Mode | The lead | Agents per prompt | Chosen when the task |
+| --- | --- | --- | --- |
+| `direct` | does the work | 0 if you named it, 2 if inferred | shows no other signal |
+| `fast` | implements; scouts answer independent read-only questions in parallel | 4 | explores, researches or compares |
+| `deep` | implements; one independent strong reviewer checks | 2 | touches migrations, security, payments, production or asks for a review |
+| `team` | splits separable work with owned files | 6, or the number you give | asks to parallelize, delegate or use agents |
+
+Name a mode to fix it for the session: `mode fast`, `modo a fondo`, `mode team 8`
+(up to 12), or after the skill name, `$ultra-hook deep ...`. `mode auto` returns to
+choosing per prompt, and `without subagents` means `direct`. A short reply such as
+"yes, continue" keeps the mode of the task it answers.
+
+Over the cap, Codex denies the spawn and Claude Code asks you to approve it. The
+selection is lexical, in English and Spanish, and is not an intent classifier: name
+the mode when it guesses wrong. An ordinary prompt in inferred `direct` mode adds
+nothing to the context.
+
+`node plugins/ultra-hook/hooks/usage-report.cjs` prints prompts, agents and over-cap
+attempts per mode for the last 30 days, from local counters that hold no prompt text.
+These are counts of agents, not of tokens or cost.
 
 ## Claude Code
 
@@ -104,6 +130,7 @@ Differences from Codex:
 
 - Routing hints name the `Agent` tool's model aliases and `SendMessage`; no model
   cache is read and reasoning effort comes from the agent definition.
+- An agent over the mode's cap asks for your approval instead of being denied.
 - Hard resets, forced cleaning and history-replacing pushes ask for your
   confirmation instead of being denied. Recognized secret access is still denied.
 - Secret and Git checks also cover the `PowerShell`, `NotebookEdit` and `Grep` tools.
@@ -137,7 +164,7 @@ requires assertions on the real target; discovering tools alone is not a UI pass
 
 [Update or uninstall](docs/GETTING_STARTED.md#update-or-remove)
 · [Troubleshooting](docs/GETTING_STARTED.md#if-something-is-missing)
-· [Download setup ZIP](https://github.com/jonmedev/Ultra_Hook/releases/download/v0.3.0/ultra-hook-0.3.0.zip)
+· [Download setup ZIP](https://github.com/jonmedev/Ultra_Hook/releases/download/v0.4.0/ultra-hook-0.4.0.zip)
 · [Advanced ZIP installation and diagnostics](docs/ADVANCED_INSTALL.md)
 
 The ZIP launchers use script-managed installation with receipts and backups.
@@ -154,7 +181,7 @@ This is an independent adaptation, not an official OpenAI, CAS or AgentControlle
 ```sh
 python -B scripts/validate.py
 python -B -m unittest discover -s tests
-node --test plugins/ultra-hook/hooks/tests/team-routing.test.cjs plugins/ultra-hook/hooks/tests/safety-windows.test.cjs plugins/ultra-hook/hooks/tests/security-boundaries.test.cjs plugins/ultra-hook/hooks/tests/claude-runtime.test.cjs
+node --test plugins/ultra-hook/hooks/tests/team-routing.test.cjs plugins/ultra-hook/hooks/tests/safety-windows.test.cjs plugins/ultra-hook/hooks/tests/security-boundaries.test.cjs plugins/ultra-hook/hooks/tests/claude-runtime.test.cjs plugins/ultra-hook/hooks/tests/modes.test.cjs
 python -B scripts/audit_release.py --git-staged --git-history --allow-github-noreply-identities
 python -B scripts/build_release.py --output ../ultra-hook-release
 ```

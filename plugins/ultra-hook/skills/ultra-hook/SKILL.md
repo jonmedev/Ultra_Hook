@@ -34,6 +34,22 @@ A read-only investigation or review stays read-only unless implementation is alr
 authorized. A missing reproduction is an evidence gap, not permission to invent one.
 Do not turn a bounded task into an open-ended optimization loop.
 
+## Work in the announced mode
+
+A hook assigns each prompt a mode and announces it when it is not plain direct work.
+Follow it; the cap on agents for the prompt is enforced, so plan within it rather
+than discovering it by a refused spawn.
+
+| Mode | How to work |
+| --- | --- |
+| `direct` | Do it yourself. One independent lookup may justify an agent. |
+| `fast` | Batch independent read-only questions to scouts on the lightest adequate model; you implement and verify. No parallel writers. |
+| `deep` | Implement it yourself, then have one reviewer that did not write the change check the diff against the acceptance check. |
+| `team` | Split only separable work, one owner per file set, interfaces agreed first, smallest team that covers it. |
+
+If the mode does not fit the task, say which one does and why, and let the user set
+it; do not work around the cap through another tool or a nested team.
+
 ## Load only what the task needs
 
 Load only the reference needed for the current decision:

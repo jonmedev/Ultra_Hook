@@ -52,12 +52,15 @@ plugins/ultra-hook/hooks/prompt-routing.cjs
 plugins/ultra-hook/hooks/protect-secrets.js
 plugins/ultra-hook/hooks/safety-command-parser.cjs
 plugins/ultra-hook/hooks/sensitive-command-approval.cjs
+plugins/ultra-hook/hooks/session-mode.cjs
 plugins/ultra-hook/hooks/session-start.cjs
 plugins/ultra-hook/hooks/team-spawn.cjs
 plugins/ultra-hook/hooks/tests/claude-runtime.test.cjs
+plugins/ultra-hook/hooks/tests/modes.test.cjs
 plugins/ultra-hook/hooks/tests/safety-windows.test.cjs
 plugins/ultra-hook/hooks/tests/security-boundaries.test.cjs
 plugins/ultra-hook/hooks/tests/team-routing.test.cjs
+plugins/ultra-hook/hooks/usage-report.cjs
 plugins/ultra-hook/plugin.json
 plugins/ultra-hook/skills/agentcontroller/SKILL.md
 plugins/ultra-hook/skills/agentcontroller/references/windows.md

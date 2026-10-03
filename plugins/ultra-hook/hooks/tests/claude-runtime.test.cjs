@@ -46,15 +46,20 @@ test("Claude hook file runs the same scripts as the Codex file from the reposito
 });
 
 test("Claude advice names Claude primitives and no Codex ones", () => {
-  const texts = [contextFor("SessionStart", "team", "claude"), contextFor("UserPromptSubmit", "team", "claude"),
-    contextFor("UserPromptSubmit", "escalation", "claude"), contextFor("PreToolUse", "team", "claude")];
+  const { modeText, capText } = require("../model-routing.cjs");
+  const texts = [contextFor("SessionStart", "team", "claude"),
+    modeText({ mode: "team", source: "explicit", cap: 6, changed: true }, "claude"),
+    contextFor("UserPromptSubmit", "escalation", "claude"), contextFor("PreToolUse", "team", "claude"),
+    capText({ mode: "fast", cap: 4, index: 5 }, "claude")];
   for (const text of texts) {
-    assert.match(text, /SendMessage/);
-    assert.match(text, /teams-and-models\.md$/);
-    const advice = text.slice(0, text.lastIndexOf(": "));
-    assert.doesNotMatch(advice, /send_message|followup_task|fork_turns|gpt-|luna|astra|\bsol\b|max\/ultra/i);
+    const advice = text.replace(/: \S*teams-and-models\.md$/, "");
+    assert.doesNotMatch(advice, /send_message|followup_task|fork_turns|gpt-|luna|astra|\bsol\b|max\/ultra|chosen leader/i);
   }
-  assert.ok(texts[0].length < 900 && texts[1].length < 650 && texts[2].length < 1100 && texts[3].length < 1600);
+  for (const index of [1, 2, 3]) assert.match(texts[index], /SendMessage/);
+  for (const index of [0, 2, 3]) assert.match(texts[index], /teams-and-models\.md$/);
+  assert.match(texts[0], /session model/);
+  assert.match(texts[4], /Approve to exceed the cap once/);
+  assert.ok(texts[0].length < 900 && texts[1].length < 650 && texts[2].length < 1100 && texts[3].length < 700);
   assert.match(texts[3], /haiku.*sonnet.*opus/);
   assert.match(texts[3], /only where the Agent tool lists them/);
   assert.equal(contextFor("unknown", "team", "claude"), "");
@@ -64,7 +69,7 @@ test("Claude advice names Claude primitives and no Codex ones", () => {
 test("lifecycle hooks emit Claude advice without decisions", () => {
   const start = run("session-start.cjs", { hook_event_name: "SessionStart", source: "startup" }).hookSpecificOutput;
   assert.equal(start.hookEventName, "SessionStart");
-  assert.match(start.additionalContext, /SendMessage/);
+  assert.match(start.additionalContext, /session model/);
   for (const name of ["Agent", "Task"]) {
     const spawn = run("team-spawn.cjs", tool(name, { prompt: "synthetic" })).hookSpecificOutput;
     assert.match(spawn.additionalContext, /haiku/);
@@ -72,8 +77,9 @@ test("lifecycle hooks emit Claude advice without decisions", () => {
     assert.equal(spawn.updatedInput, undefined);
   }
   assert.deepEqual(run("team-spawn.cjs", tool("Write", { file_path: "notes.md" })), {});
-  const skill = run("prompt-routing.cjs", { hook_event_name: "UserPromptSubmit", prompt: "/ultra-hook:ultra-hook revisa esto" });
-  assert.match(skill.hookSpecificOutput.additionalContext, /team request/);
+  const skill = run("prompt-routing.cjs", { hook_event_name: "UserPromptSubmit", prompt: "/ultra-hook:ultra-hook equipo revisa esto" });
+  assert.match(skill.hookSpecificOutput.additionalContext, /mode: team \(set by the user/);
+  assert.match(skill.hookSpecificOutput.additionalContext, /SendMessage/);
   const stronger = run("prompt-routing.cjs", { hook_event_name: "UserPromptSubmit", prompt: "Usa opus para esto" });
   assert.match(stronger.hookSpecificOutput.additionalContext, /strongest model the Agent tool lists/);
   assert.deepEqual(run("prompt-routing.cjs", { hook_event_name: "UserPromptSubmit", prompt: "No uses opus aqui" }), {});

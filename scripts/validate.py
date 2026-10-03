@@ -114,6 +114,9 @@ def validate(root=ROOT):
     with tempfile.TemporaryDirectory(prefix='ultra-validate-') as directory:
         for name, data in snapshot.items():
             if name.endswith(('.cjs', '.js')):
+                # Hook sources stay printable ASCII, so an invisible control or
+                # combining character cannot silently change a pattern.
+                require(all(byte in (9, 10) or 32 <= byte <= 126 for byte in data), 'non-ascii-hook-source')
                 file = Path(directory) / PurePosixPath(name).name
                 file.write_bytes(data)
                 checked = subprocess.run(['node', '--check', str(file)], capture_output=True,

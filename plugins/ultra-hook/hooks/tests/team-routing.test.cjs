@@ -155,18 +155,21 @@ test("explicit bilingual coordination and escalation still trigger, without inte
     "Sube el esfuerzo", "No uses agentes; aumenta el razonamiento"]) assert.equal(promptKind(prompt), "escalation", prompt);
 });
 test("context is event-specific, bounded, and retains coordination/cost boundaries", () => {
+  const { modeText } = require("../model-routing.cjs");
   const start = contextFor("SessionStart");
-  const team = contextFor("UserPromptSubmit");
+  const team = modeText({ mode: "team", source: "auto", cap: 6, changed: true });
   const escalation = contextFor("UserPromptSubmit", "escalation");
   const spawn = contextFor("PreToolUse");
   assert.ok(start.length < 900, start.length);
   assert.ok(team.length < 650, team.length);
   assert.ok(escalation.length < 1100, escalation.length);
-  assert.ok(spawn.length < 1600, spawn.length);
+  assert.ok(spawn.length < 700, spawn.length);
   assert.equal(contextFor("unknown"), "");
+  assert.equal(contextFor("UserPromptSubmit"), "");
   assert.notEqual(start, spawn);
-  assert.match(spawn, /startup\/integration cost/);
-  assert.match(spawn, /send_message/);
+  assert.match(start, /direct.*fast.*deep.*team/);
+  assert.match(team, /smallest team that covers it/);
+  assert.match(spawn, /followup_task/);
   assert.match(escalation, /strongest supported model at max\/ultra/);
   assert.match(escalation, /explicit model\/effort caps and budgets/);
 });
