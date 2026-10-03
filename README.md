@@ -2,29 +2,33 @@
 
 A plugin for Codex and Claude Code for implementation, debugging, reviews and
 research. It helps the agent choose a proportionate workflow, coordinate useful
-native teammates and verify the result. Small tasks stay direct. The sections below
-describe Codex; [Claude Code](#claude-code) has its own short installation.
+native teammates and verify the result. Small tasks stay direct. One setup installs
+it into whichever of the two runtimes it finds; [Claude Code](#claude-code) lists
+what differs there.
 
 **[Quick start](docs/GETTING_STARTED.md)** · **[Releases](https://github.com/jonmedev/Ultra_Hook/releases)**
 
 ## Install Ultra Hook and AgentController together
 
-**[Download the setup ZIP](https://github.com/jonmedev/Ultra_Hook/releases/download/v0.2.0/ultra-hook-0.2.0.zip)**
+**[Download the setup ZIP](https://github.com/jonmedev/Ultra_Hook/releases/download/v0.3.0/ultra-hook-0.3.0.zip)**
 
 1. Extract it into a folder you will keep.
 2. **Windows:** double-click `Install.cmd`. **macOS/Linux:** open Terminal in that
    folder and run `sh install.sh`.
 3. Follow the result shown by the installer, then activate the hooks below.
 
-The launcher installs Ultra Hook, downloads AgentController from Kasempiternal's
-project and prepares the platform backend. On Windows it builds and registers the
+The launcher installs Ultra Hook into Codex and Claude Code, whichever CLIs it
+finds, each through its own marketplace in this package. It downloads AgentController
+from Kasempiternal's project, prepares the platform backend and registers the ready
+launcher in each runtime that has none. On Windows it builds and registers the
 stdio executable; on Linux it prepares and registers an isolated Python launcher.
 On macOS it downloads and verifies the official DMG; installing the app and granting
 desktop permissions remain explicit user steps. A pending step is reported as pending.
 The official macOS app requires Apple Silicon and macOS 14 or newer; this DMG does
 not support Intel Macs.
 
-One-time prerequisites: signed-in [Codex CLI](https://developers.openai.com/codex/cli/),
+One-time prerequisites: a signed-in [Codex CLI](https://developers.openai.com/codex/cli/)
+or [Claude Code](https://code.claude.com/docs/en/setup) (or both),
 [Node.js LTS](https://nodejs.org/en/download), [Python 3.11+](https://www.python.org/downloads/)
 and [Git](https://git-scm.com/downloads/). Windows also needs the
 [.NET 9 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/9.0) to build the
@@ -41,7 +45,7 @@ It needs Codex CLI, Node.js and Git:
 Open **PowerShell on Windows** or **Terminal on macOS/Linux** and run each line:
 
 ```sh
-codex plugin marketplace add jonmedev/Ultra_Hook --ref v0.2.0
+codex plugin marketplace add jonmedev/Ultra_Hook --ref v0.3.0
 codex plugin add ultra-hook@ultra-hook
 ```
 
@@ -85,13 +89,15 @@ does not unlock models, enforce a spending cap or claim measured savings.
 ## Claude Code
 
 The same two skills and five hook scripts run in Claude Code from this repository's
-`.claude-plugin` manifests. It needs Claude Code and Node.js; the Python installer,
-doctor and `/hooks` trust review above are Codex-only. In a terminal:
+`.claude-plugin` manifests. The complete setup above installs them when it finds
+the `claude` CLI. For the plugin alone, with Claude Code and Node.js, in a terminal:
 
 ```sh
 claude plugin marketplace add jonmedev/Ultra_Hook
 claude plugin install ultra-hook@ultra-hook
 ```
+
+Claude Code has no `/hooks` trust review: installing the plugin enables its hooks.
 
 Start a new session and invoke `/ultra-hook:ultra-hook` followed by your task.
 Differences from Codex:
@@ -101,11 +107,13 @@ Differences from Codex:
 - Hard resets, forced cleaning and history-replacing pushes ask for your
   confirmation instead of being denied. Recognized secret access is still denied.
 - Secret and Git checks also cover the `PowerShell`, `NotebookEdit` and `Grep` tools.
-- AgentController is registered separately for each runtime, for example
-  `claude mcp add --scope user agentcontroller -- <launcher>` with the launcher the
-  complete setup prepared. A Codex registration is not visible to Claude Code.
+- AgentController is registered separately for each runtime. The complete setup
+  registers its launcher in both; after a plugin-only installation use
+  `claude mcp add --scope user agentcontroller -- <launcher>`. A Codex registration
+  is not visible to Claude Code.
 
-Remove it with `claude plugin uninstall ultra-hook@ultra-hook`.
+Remove a plugin-only installation with `claude plugin uninstall ultra-hook@ultra-hook`;
+a setup installation is removed by `scripts/uninstall.py` for both runtimes.
 
 ## AgentController: optional for UI validation
 
@@ -129,7 +137,7 @@ requires assertions on the real target; discovering tools alone is not a UI pass
 
 [Update or uninstall](docs/GETTING_STARTED.md#update-or-remove)
 · [Troubleshooting](docs/GETTING_STARTED.md#if-something-is-missing)
-· [Download setup ZIP](https://github.com/jonmedev/Ultra_Hook/releases/download/v0.2.0/ultra-hook-0.2.0.zip)
+· [Download setup ZIP](https://github.com/jonmedev/Ultra_Hook/releases/download/v0.3.0/ultra-hook-0.3.0.zip)
 · [Advanced ZIP installation and diagnostics](docs/ADVANCED_INSTALL.md)
 
 The ZIP launchers use script-managed installation with receipts and backups.

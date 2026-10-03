@@ -95,6 +95,25 @@ class AcquisitionTests(unittest.TestCase):
         with self.assertRaises(setup.AcquisitionError):
             setup.install_linux_source(self.destination, stream.getvalue())
 
+    def test_build_cache_cleanup_keeps_source_licenses_and_executable(self):
+        kept = ['bin/agentcontroller-windows.exe', 'source/LICENSE', 'source/Windows/AgentController.Windows/Program.cs',
+                'LICENSE.AgentController', 'unrelated/.nuget/keep.txt']
+        caches = ['.nuget/packages/synthetic/lib.dll', '.build-home/AppData/Local/x', '.dotnet-cli/state', 'NuGet/Migrations/1',
+                  'source/Windows/AgentController.Windows/obj/project.assets.json',
+                  'source/Windows/AgentController.Windows/bin/Release/out.dll']
+        for name in kept + caches:
+            (self.destination / name).parent.mkdir(parents=True, exist_ok=True)
+            (self.destination / name).write_text('synthetic')
+        self.assertTrue(setup.remove_build_caches(self.destination))
+        for name in kept:
+            self.assertTrue((self.destination / name).is_file(), name)
+        for name in setup.BUILD_CACHES:
+            self.assertFalse((self.destination / name).exists(), name)
+        self.assertTrue(setup.remove_build_caches(self.destination))
+        with mock.patch.object(setup.shutil, 'rmtree', side_effect=PermissionError('synthetic')):
+            (self.destination / '.nuget').mkdir()
+            self.assertFalse(setup.remove_build_caches(self.destination))
+
     def test_windows_acquisition_preserves_build_api_and_reuses_without_execution(self):
         def build(destination, runtime, **kwargs):
             self.assertTrue(kwargs['enabled'])

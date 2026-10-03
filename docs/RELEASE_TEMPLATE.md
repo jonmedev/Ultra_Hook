@@ -7,12 +7,14 @@
 2. On Windows, double-click `Install.cmd`. On macOS/Linux, run `sh install.sh` there.
 3. Review the result, approve Ultra Hook's hooks in Codex `/hooks`, and start a new session.
 
-The launcher runs `python -B scripts/install.py --with-agentcontroller`. It acquires
+The launcher runs `python -B scripts/install.py --with-agentcontroller`. It installs
+into Codex and Claude Code, whichever CLIs it finds, each through its own marketplace
+in this package (`.agents/plugins` and `.claude-plugin`). It acquires
 Kasempiternal's controller and registers ready Windows/Linux launchers. macOS gets
 the verified official DMG, with app installation/permissions/bridge steps still
 explicitly pending. It does not overwrite existing controller registrations.
 
-Prerequisites: Codex CLI signed in, Node.js LTS, Python 3.11+ and Git. Windows source
+Prerequisites: Codex CLI or Claude Code signed in, Node.js LTS, Python 3.11+ and Git. Windows source
 builds additionally need the .NET 9 SDK. See the
 [quick start](https://github.com/jonmedev/Ultra_Hook/blob/v__VERSION__/docs/GETTING_STARTED.md)
 for platform details and existing installations.
@@ -29,6 +31,16 @@ codex plugin add ultra-hook@ultra-hook
 Codex downloads and installs only the plugin. **No ZIP extraction or Python is needed
 for this method; AgentController is not acquired.** In Codex, review the five hooks in `/hooks`, start a new conversation
 and send `$ultra-hook` followed by your task.
+
+For Claude Code, with Node.js installed:
+
+```sh
+claude plugin marketplace add jonmedev/Ultra_Hook
+claude plugin install ultra-hook@ultra-hook
+```
+
+Start a new session and send `/ultra-hook:ultra-hook` followed by your task. These
+commands follow the repository's default branch rather than this tag.
 
 [Quick start and examples](https://github.com/jonmedev/Ultra_Hook/blob/v__VERSION__/docs/GETTING_STARTED.md)
 explain activation, prerequisites and the separate update paths for existing installations.

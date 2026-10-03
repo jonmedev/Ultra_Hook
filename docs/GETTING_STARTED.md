@@ -4,12 +4,13 @@ Ultra Hook helps Codex implement, debug, review and research with appropriate
 verification and useful native teammates. Small tasks stay direct. It preserves
 your chosen leader and permissions. It does not unlock models or guarantee savings.
 
-This guide covers Codex. For Claude Code, follow the
-[two-command installation](../README.md#claude-code) instead.
+The complete setup below installs into Codex and Claude Code, whichever CLIs it
+finds. The remaining sections describe Codex; [Claude Code](../README.md#claude-code)
+has its own plugin-only commands and differences.
 
 ## Install the complete setup
 
-Download the [setup ZIP](https://github.com/jonmedev/Ultra_Hook/releases/download/v0.2.0/ultra-hook-0.2.0.zip),
+Download the [setup ZIP](https://github.com/jonmedev/Ultra_Hook/releases/download/v0.3.0/ultra-hook-0.3.0.zip),
 [verify it](../SECURITY.md#verify-a-download), and extract it into a permanent folder.
 On Windows double-click `Install.cmd`; on macOS/Linux run `sh install.sh` there.
 Both launchers run the same supported command:
@@ -19,12 +20,12 @@ python -B scripts/install.py --with-agentcontroller
 ```
 
 The installer gets AgentController from its upstream project, prepares it and
-registers the ready launcher with Codex. It checks existing registrations first
+registers the ready launcher with Codex and with Claude Code when present. It checks existing registrations first
 and does not overwrite another controller. Repeat runs verify owned files before
 reuse. Downloads/builds stay under your Codex profile's `tools/agentcontroller`
 directory unless you choose `--agentcontroller-dir`.
 
-Requirements: signed-in Codex CLI, Node.js LTS, Git and Python 3.11+. Windows needs
+Requirements: signed-in Codex CLI or Claude Code, Node.js LTS, Git and Python 3.11+. Windows needs
 the .NET 9 SDK for the upstream source build. These prerequisites are checked but
 not installed silently. On macOS the official DMG download is automated; app
 installation, permissions and the bridge remain pending until completed below.
@@ -54,7 +55,7 @@ For an existing Ultra Hook/CAS installation, read [updates](#update-or-remove) f
 Open **PowerShell on Windows** or **Terminal on macOS/Linux**, then run each line:
 
 ```sh
-codex plugin marketplace add jonmedev/Ultra_Hook --ref v0.2.0
+codex plugin marketplace add jonmedev/Ultra_Hook --ref v0.3.0
 codex plugin add ultra-hook@ultra-hook
 ```
 

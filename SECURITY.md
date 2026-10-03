@@ -68,7 +68,10 @@ screenshots privately; do not capture unrelated applications.
 The complete setup launchers explicitly request `--with-agentcontroller`. This
 authorizes upstream acquisition and registration of a prepared local backend.
 Windows source builds execute pinned upstream build code with an isolated build
-environment. Linux uses pinned source and a local launcher without installing Python
+environment. The pinned project declares no NuGet package references; the .NET SDK
+still restores Microsoft's runtime packs for a self-contained executable, at the
+patch level of the installed SDK, and those are not pinned by hash here. Build
+caches are removed after a successful build; the source, licenses and executable stay. Linux uses pinned source and a local launcher without installing Python
 packages globally. macOS downloads a pinned official DMG with a fixed SHA-256 and
 leaves app installation/permissions pending. Reuse verifies recorded owned-file
 hashes; unknown or modified destination contents are not overwritten. These checks
@@ -97,17 +100,17 @@ Download the versioned ZIP and checksum from this repository's GitHub Releases.
 Compare the checksum. In PowerShell, from the download directory:
 
 ```powershell
-$actual = (Get-FileHash -Algorithm SHA256 ./ultra-hook-0.2.0.zip).Hash.ToLowerInvariant()
-$expected = ((Get-Content ./ultra-hook-0.2.0.sha256 -Raw).Trim() -split '\s+')[0]
+$actual = (Get-FileHash -Algorithm SHA256 ./ultra-hook-0.3.0.zip).Hash.ToLowerInvariant()
+$expected = ((Get-Content ./ultra-hook-0.3.0.sha256 -Raw).Trim() -split '\s+')[0]
 if ($actual -ne $expected) { throw 'Checksum mismatch: do not install.' }
 ```
 
-On Linux use `sha256sum -c ultra-hook-0.2.0.sha256`; on macOS use
-`shasum -a 256 -c ultra-hook-0.2.0.sha256`. A matching checksum alone does not
+On Linux use `sha256sum -c ultra-hook-0.3.0.sha256`; on macOS use
+`shasum -a 256 -c ultra-hook-0.3.0.sha256`. A matching checksum alone does not
 authenticate its publisher. Verify signed provenance with GitHub CLI:
 
 ```sh
-gh attestation verify ultra-hook-0.2.0.zip --repo jonmedev/Ultra_Hook --signer-workflow jonmedev/Ultra_Hook/.github/workflows/release.yml --source-ref refs/tags/v0.2.0 --deny-self-hosted-runners
+gh attestation verify ultra-hook-0.3.0.zip --repo jonmedev/Ultra_Hook --signer-workflow jonmedev/Ultra_Hook/.github/workflows/release.yml --source-ref refs/tags/v0.3.0 --deny-self-hosted-runners
 ```
 
 This checks artifact identity and the expected repository, workflow and tag.

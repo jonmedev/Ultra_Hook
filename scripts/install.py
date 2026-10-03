@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install Ultra Hook through the official Codex plugin CLI; no model calls."""
+"""Install Ultra Hook through the official Codex and Claude Code plugin CLIs; no model calls."""
 from __future__ import annotations
 import argparse
 import copy
@@ -18,6 +18,11 @@ import tempfile
 import threading
 import time
 import tomllib
+
+# Helper modules import this file by name. When it runs as a script, share the
+# one module object so their InstallError is the class handled here.
+if __name__ == '__main__':
+    sys.modules.setdefault('install', sys.modules['__main__'])
 
 PLUGIN = 'ultra-hook@ultra-hook'
 MARKETPLACE = 'ultra-hook'
@@ -775,26 +780,85 @@ def parser():
     result.add_argument('--with-agentcontroller', action='store_true', help='Explicitly acquire and register AgentController, or reuse an existing reviewed local registration.')
     result.add_argument('--agentcontroller-dir', help='Acquisition directory; default CODEX_HOME/tools/agentcontroller. Requires --with-agentcontroller.')
     result.add_argument('--replace-cas', action='store_true', help='Disable CAS only after 5 trusted new hooks and 2 skills are verified.')
+    add_runtime_arguments(result)
     return result
+
+
+def add_runtime_arguments(result):
+    result.add_argument('--codex', choices=('auto', 'yes', 'no'), default='auto',
+                        help='Codex step: auto runs it when the Codex CLI is found (default).')
+    result.add_argument('--claude-code', choices=('auto', 'yes', 'no'), default='auto',
+                        help='Claude Code step: auto runs it when the Claude Code CLI is found (default).')
+    result.add_argument('--claude-home', help='Explicit Claude Code profile directory (use synthetic directories for tests).')
+    result.add_argument('--claude-command', help='Existing Claude Code executable path.')
+
+
+def codex_selected(args):
+    """Codex is skipped only when absent and another runtime can take the step."""
+    if args.codex == 'no':
+        return False
+    return args.codex == 'yes' or bool(args.codex_command or shutil.which('codex')) or args.claude_code == 'no'
+
+
+def finish(operation, codex, claude, *, json_output=False):
+    """Report both runtimes; a failure in either one fails the command."""
+    import claude_code
+    if codex is None and (claude is None or claude.get('status') == 'skipped'):
+        codex = {'status': 'error', 'message': 'Codex CLI or Claude Code CLI is required. Install one, then rerun.'}
+    failed = any(part is not None and part.get('status') == 'error' for part in (codex, claude))
+    stream = sys.stderr if failed else sys.stdout
+    if json_output:
+        document = dict(codex) if codex is not None else {'status': 'error' if failed else claude['status'],
+                                                          'codex': {'status': 'skipped'}}
+        if claude is not None:
+            document['claudeCode'] = claude
+        print(json.dumps(document, indent=2), file=stream)
+    else:
+        parts = [human_result(operation, codex)] if codex is not None else []
+        if claude is not None:
+            parts.append(claude_code.human_result(operation, claude))
+        print('\n\n'.join(parts), file=stream)
+    return 1 if failed else 0
+
+
+def controller_for_claude(args, codex):
+    """Reuse the launcher Codex prepared; acquire one only when Codex is not handled."""
+    if args.agentcontroller_command:
+        return args.agentcontroller_command
+    if not args.with_agentcontroller:
+        return None
+    if codex is not None:
+        command = codex.get('agentcontroller', {}).get('acquisition', {}).get('command')
+    else:
+        from setup_agentcontroller import acquire
+        destination = guard_path(Path(os.path.abspath(Path(args.agentcontroller_dir).expanduser()))
+                                 if args.agentcontroller_dir else Path.home() / '.ultra-hook/agentcontroller')
+        command = request_acquisition(acquire, destination, dry_run=args.dry_run)['command']
+    return command if command and Path(command).is_file() else None
 
 
 def main():
     args = parser().parse_args()
+    import claude_code
+    result = None
     try:
         if args.with_agentcontroller and not args.dry_run and not args.json:
             print('Preparing optional AgentController setup; source builds can take several minutes.', file=sys.stderr)
-        home = codex_home(args.codex_home)
-        result = install(REPO, home, CLI(home, args.codex_command), dry_run=args.dry_run,
-                         agentcontroller_command=args.agentcontroller_command, replace_cas=args.replace_cas,
-                         with_agentcontroller=args.with_agentcontroller, agentcontroller_dir=args.agentcontroller_dir)
-        emit_result('install', result, json_output=args.json)
-        return 0
+        if codex_selected(args):
+            home = codex_home(args.codex_home)
+            result = install(REPO, home, CLI(home, args.codex_command), dry_run=args.dry_run,
+                             agentcontroller_command=args.agentcontroller_command, replace_cas=args.replace_cas,
+                             with_agentcontroller=args.with_agentcontroller, agentcontroller_dir=args.agentcontroller_dir)
     except InstallError as exc:
-        emit_result('install', {'status': 'error', 'message': str(exc)}, json_output=args.json, stream=sys.stderr)
-        return 1
+        return finish('install', {'status': 'error', 'message': str(exc)}, None, json_output=args.json)
     except (OSError, ValueError, TypeError, KeyError, AttributeError):
-        emit_result('install', {'status': 'error', 'message': 'Installation failed; private diagnostics withheld.'}, json_output=args.json, stream=sys.stderr)
-        return 1
+        return finish('install', {'status': 'error', 'message': 'Installation failed; private diagnostics withheld.'}, None, json_output=args.json)
+    # Codex is complete before Claude Code starts; a Claude Code failure is
+    # reported without undoing the Codex installation.
+    claude = claude_code.run_step('install', args.claude_code, lambda home, cli: claude_code.install(
+        REPO, home, cli, dry_run=args.dry_run, controller_command=controller_for_claude(args, result)),
+        home=args.claude_home, command=args.claude_command)
+    return finish('install', result, claude, json_output=args.json)
 
 
 if __name__ == '__main__':

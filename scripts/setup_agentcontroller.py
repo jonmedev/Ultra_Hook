@@ -322,6 +322,26 @@ def dotnet_executable(command=None):
     return None
 
 
+# Created by this build inside its own, initially empty destination. The pinned
+# source, licenses and published executable stay; only regenerable caches go.
+BUILD_CACHES = ('.build-home', '.dotnet-cli', '.nuget', 'NuGet', '.disabled-git-hooks',
+                'source/Windows/AgentController.Windows/bin', 'source/Windows/AgentController.Windows/obj')
+
+
+def remove_build_caches(destination):
+    """Best effort: a cache still in use is retained and reported, never forced."""
+    removed = True
+    for name in BUILD_CACHES:
+        path = destination / name
+        try:
+            guard_path(path)
+            if path.is_dir():
+                shutil.rmtree(path)
+        except (OSError, InstallError):
+            removed = False
+    return removed
+
+
 def plan(destination, runtime='win-x64', dotnet_command=None):
     if runtime not in ('win-x64', 'win-arm64'):
         raise ValueError('Unsupported AgentController runtime.')
@@ -335,7 +355,7 @@ def plan(destination, runtime='win-x64', dotnet_command=None):
             'commands': [['git', 'clone', '--no-checkout', SOURCE, str(source)],
                          ['git', '-C', str(source), 'checkout', '--detach', COMMIT],
                          [dotnet_executable(dotnet_command) or 'dotnet', 'publish', str(project), '--configuration', 'Release', '--runtime', runtime,
-                          '--self-contained', 'true', '--output', str(output), '-p:PublishSingleFile=true',
+                          '--self-contained', 'true', '--output', str(output), '--disable-build-servers', '-p:PublishSingleFile=true',
                           '-p:IncludeNativeLibrariesForSelfExtract=true']],
             'commandAfterBuild': str(output / 'agentcontroller-windows.exe')}
 
@@ -396,9 +416,10 @@ def build(destination, runtime='win-x64', *, enabled=False, dotnet_command=None)
     with executable.open('rb') as handle:
         provenance['binarySha256'] = hashlib.file_digest(handle, 'sha256').hexdigest()
     write_private(destination / 'source-provenance.json', json.dumps(provenance, indent=2).encode('utf-8'), expected=None)
+    caches_removed = remove_build_caches(destination)
     guard_path(build_lock, regular=True)
     build_lock.unlink()
-    return {'status': 'built', **result,
+    return {'status': 'built', **result, 'buildCachesRemoved': caches_removed,
             'next': 'Pass commandAfterBuild to install.py --agentcontroller-command. Review platform permissions locally.'}
 
 

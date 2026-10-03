@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Remove only registrations owned by an Ultra Hook installation receipt."""
+"""Remove only registrations owned by an Ultra Hook installation receipt, in Codex and Claude Code."""
 import argparse
 import json
 from pathlib import Path
 import sys
+import install
+import claude_code
 from install import CLI, CAS, PLUGIN, MARKETPLACE, SERVER, InstallError, codex_home, load_config, same_path, set_plugin_enabled, installation_lock, write_private, marketplaces, fingerprint, guard_path, private_bytes, MAX_RECEIPT_BYTES, plugin_catalog, protected, emit_result, OutputParser
 
 
@@ -70,17 +72,25 @@ def main():
     parser.add_argument('--codex-command')
     parser.add_argument('--dry-run', action='store_true')
     parser.add_argument('--json', action='store_true', help='Emit safe JSON only, for automation (default: readable summary).')
+    install.add_runtime_arguments(parser)
     args = parser.parse_args()
+    result = None
     try:
-        home = codex_home(args.codex_home)
-        emit_result('uninstall', uninstall(home, CLI(home, args.codex_command), args.dry_run), json_output=args.json)
-        return 0
+        if install.codex_selected(args):
+            home = codex_home(args.codex_home)
+            result = uninstall(home, CLI(home, args.codex_command), args.dry_run)
     except InstallError as exc:
-        emit_result('uninstall', {'status': 'error', 'message': str(exc)}, json_output=args.json, stream=sys.stderr)
-        return 1
+        result = {'status': 'error', 'message': str(exc)}
     except (OSError, ValueError, TypeError, KeyError, AttributeError):
-        emit_result('uninstall', {'status': 'error', 'message': 'Removal failed; private diagnostics withheld.'}, json_output=args.json, stream=sys.stderr)
-        return 1
+        result = {'status': 'error', 'message': 'Removal failed; private diagnostics withheld.'}
+
+    def remove(home, cli):
+        # A profile this installer never touched is not an error in auto mode.
+        if args.claude_code == 'auto' and not claude_code.load_receipt(home)[0]:
+            return {'status': 'skipped', 'message': 'no Ultra Hook receipt in its profile.'}
+        return claude_code.uninstall(home, cli, dry_run=args.dry_run)
+    claude = claude_code.run_step('uninstall', args.claude_code, remove, home=args.claude_home, command=args.claude_command)
+    return install.finish('uninstall', result, claude, json_output=args.json)
 
 
 if __name__ == '__main__':

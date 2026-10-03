@@ -535,6 +535,9 @@ class OutputTests(unittest.TestCase):
     def invoke(self, module, args, result=None, error=None):
         target = 'install' if module is install else 'inspect' if module is doctor else 'uninstall'
         stdout,stderr=io.StringIO(),io.StringIO()
+        # These cases cover the Codex step alone; test_claude_code.py covers the other
+        # runtime with a fake CLI. Neither may reach a live profile.
+        args = args + ['--codex','yes','--claude-code','no']
         with mock.patch.object(sys,'argv',[module.__name__+'.py']+args), \
              mock.patch.object(module,'CLI',return_value=object()), \
              mock.patch.object(module,'codex_home',return_value=Path('synthetic profile')), \

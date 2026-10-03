@@ -1,7 +1,7 @@
 # Release procedure
 
 1. Review the intended source changes and dependency attribution. Set the same
-   semantic version in both plugin manifests. Keep generated binaries, local
+   semantic version in both Codex plugin manifests and `.claude-plugin/plugin.json`. Keep generated binaries, local
    configuration, session logs, screenshots and credentials outside the repository.
 2. Run the README's validation, tests and privacy audit. Check the working tree,
    complete index and reachable Git history. Use the extra `--deny-term` option for
@@ -14,6 +14,8 @@
    Also verify the quick-start native commands from a fresh profile outside this
    checkout: Git marketplace add with the release tag, plugin add, metadata discovery
    and native removal. Test upgrades through the documented remove/reinstall path.
+   Repeat installation, doctor and removal against a fresh Claude Code profile
+   (`--claude-home`), and load the package in a session to confirm its skills and hooks.
    Test complete setup through `Install.cmd` / `install.sh` or the equivalent
    `install.py --with-agentcontroller`, including repeat acquisition and native
    registration. Release CI runs real acquisition on Windows, Linux and macOS;

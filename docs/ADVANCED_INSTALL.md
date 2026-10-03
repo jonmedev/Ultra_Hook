@@ -71,6 +71,21 @@ doctor and uninstall, and launch Codex with that same profile. A fresh profile m
 be signed in separately for model work; never copy credentials into this repository.
 `--codex-command "path to executable"` selects a Codex executable absent from PATH.
 
+The same commands also install into Claude Code through this package's
+`.claude-plugin` marketplace. Each runtime step is `auto` by default: it runs when
+that CLI is found and is skipped otherwise. Use `--codex yes|no` and
+`--claude-code yes|no` to require or exclude one; `yes` fails when the CLI is absent.
+`--claude-home` selects a Claude Code profile (`CLAUDE_CONFIG_DIR` otherwise) and
+`--claude-command` an executable absent from PATH. Codex is completed first; a
+Claude Code failure is reported without undoing it. An existing Claude Code
+installation from the same directory is updated through `claude plugin update`, and
+one registered from another source is left alone. A supplied or acquired
+AgentController launcher is registered in Claude Code only when it has no
+`agentcontroller` server; that lookup can briefly start an existing one. With Codex
+excluded, acquisition defaults to `.ultra-hook/agentcontroller` under your home
+directory. `python -B scripts/claude_code.py` runs the Claude Code step alone, with
+`--dry-run`, `--check` and `--uninstall`.
+
 If migrating from CAS, use `--replace-cas` on both the preview and install commands.
 CAS remains enabled until the replacement is verified ready. After hook approval,
 rerun installation with `--replace-cas` to complete migration, then start a new
@@ -218,6 +233,10 @@ profile to preview removal:
 python -B scripts/uninstall.py --dry-run
 python -B scripts/uninstall.py
 ```
+
+Both commands also cover Claude Code when its profile holds a receipt from this
+installer, removing only the marketplace, plugin and controller registration it
+created there.
 
 Removal preserves backups, source files, independent controller binaries and
 unrelated settings. If this installation disabled CAS, removal restores it when

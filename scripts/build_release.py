@@ -67,6 +67,7 @@ plugins/ultra-hook/skills/ultra-hook/references/research.md
 plugins/ultra-hook/skills/ultra-hook/references/teams-and-models.md
 scripts/audit_release.py
 scripts/build_release.py
+scripts/claude_code.py
 scripts/doctor.py
 scripts/install.py
 scripts/setup_agentcontroller.py
@@ -74,6 +75,7 @@ scripts/uninstall.py
 scripts/validate.py
 tests/test_audit_release.py
 tests/test_build_release.py
+tests/test_claude_code.py
 tests/test_install.py
 tests/test_install_security.py
 tests/test_controller_setup.py

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only Ultra Hook metadata checks; never run a model or grant hook trust."""
+"""Read-only Ultra Hook metadata checks for Codex and Claude Code; never run a model or grant hook trust."""
 from __future__ import annotations
 import argparse
 import json
@@ -10,6 +10,8 @@ import sys
 import threading
 import time
 from collections import Counter
+import install
+import claude_code
 from install import CLI, InstallError, PLUGIN, REPO, SERVER, codex_home, load_config, plugin_catalog, marketplaces, stop_process, check_package, guard_path, private_bytes, emit_result, OutputParser
 
 EXPECTED_SKILLS = {'ultra-hook:ultra-hook', 'ultra-hook:agentcontroller'}
@@ -252,17 +254,21 @@ def main():
     parser.add_argument('--cwd', type=Path, default=REPO)
     parser.add_argument('--json', action='store_true', help='Emit safe JSON only, for automation (default: readable summary).')
     parser.add_argument('--check-agentcontroller', action='store_true', help='Explicitly start only a reviewed local AgentController stdio registration for metadata.')
+    install.add_runtime_arguments(parser)
     args = parser.parse_args()
+    result = None
     try:
-        result = inspect(CLI(codex_home(args.codex_home), args.codex_command), args.cwd, check_agentcontroller=args.check_agentcontroller)
-        emit_result('doctor', result, json_output=args.json)
-        return 0 if result['ready'] else 2
+        if install.codex_selected(args):
+            result = inspect(CLI(codex_home(args.codex_home), args.codex_command), args.cwd, check_agentcontroller=args.check_agentcontroller)
     except InstallError as exc:
-        emit_result('doctor', {'status': 'error', 'message': str(exc)}, json_output=args.json, stream=sys.stderr)
-        return 1
+        result = {'status': 'error', 'message': str(exc)}
     except (OSError, ValueError, TypeError, KeyError, AttributeError):
-        emit_result('doctor', {'status': 'error', 'message': 'Inspection failed; private diagnostics withheld.'}, json_output=args.json, stream=sys.stderr)
-        return 1
+        result = {'status': 'error', 'message': 'Inspection failed; private diagnostics withheld.'}
+    claude = claude_code.run_step('doctor', args.claude_code, lambda home, cli: claude_code.inspect(REPO, cli),
+                                  home=args.claude_home, command=args.claude_command)
+    code = install.finish('doctor', result, claude, json_output=args.json)
+    ready = all(part.get('ready') for part in (result, claude) if part is not None and part.get('status') != 'skipped')
+    return code or (0 if ready else 2)
 
 
 if __name__ == '__main__':
