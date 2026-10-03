@@ -222,6 +222,7 @@ test("mode texts are compact and name the cap", () => {
   assert.match(modeText({ mode: "direct", source: "auto", cap: 2, changed: false, released: true }), /mode: direct/);
   assert.match(modeText({ mode: "direct", source: "auto", cap: 1, changed: true }), /at most 1 agent for/);
   assert.match(spawnText({ mode: "deep", cap: 2, index: 1 }), /spawn 1\/2 \(deep\).*must not be the author/);
-  assert.ok(spawnText({ mode: "team", cap: 6, index: 2 }, "claude").length < 600);
+  // Measured without the installation-dependent policy path.
+  assert.ok(spawnText({ mode: "team", cap: 6, index: 2 }, "claude").split("Full protocol")[0].length < 480);
   assert.match(capText({ mode: "deep", cap: 2, index: 3 }), /do not retry through another tool/);
 });

@@ -163,7 +163,7 @@ test("context is event-specific, bounded, and retains coordination/cost boundari
   assert.ok(start.length < 900, start.length);
   assert.ok(team.length < 650, team.length);
   assert.ok(escalation.length < 1100, escalation.length);
-  assert.ok(spawn.length < 700, spawn.length);
+  assert.ok(spawn.split("Full protocol")[0].length < 520, spawn.length);
   assert.equal(contextFor("unknown"), "");
   assert.equal(contextFor("UserPromptSubmit"), "");
   assert.notEqual(start, spawn);

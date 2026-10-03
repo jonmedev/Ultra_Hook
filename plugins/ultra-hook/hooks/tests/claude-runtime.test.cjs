@@ -59,7 +59,7 @@ test("Claude advice names Claude primitives and no Codex ones", () => {
   for (const index of [0, 2, 3]) assert.match(texts[index], /teams-and-models\.md$/);
   assert.match(texts[0], /session model/);
   assert.match(texts[4], /Approve to exceed the cap once/);
-  assert.ok(texts[0].length < 900 && texts[1].length < 650 && texts[2].length < 1100 && texts[3].length < 700);
+  assert.ok(texts[0].length < 900 && texts[1].length < 650 && texts[2].length < 1100 && texts[3].split("Full protocol")[0].length < 480);
   assert.match(texts[3], /haiku.*sonnet.*opus/);
   assert.match(texts[3], /only where the Agent tool lists them/);
   assert.equal(contextFor("unknown", "team", "claude"), "");
