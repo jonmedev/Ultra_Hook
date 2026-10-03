@@ -1,0 +1,13 @@
+{
+  "name": "ultra-hook",
+  "description": "Ultra Hook for Claude Code. Codex reads .agents/plugins/marketplace.json instead.",
+  "owner": { "name": "jonmedev" },
+  "plugins": [
+    {
+      "name": "ultra-hook",
+      "source": "./",
+      "description": "Proportionate agent teamwork, compact lifecycle hints and AgentController UI validation.",
+      "category": "development"
+    }
+  ]
+}

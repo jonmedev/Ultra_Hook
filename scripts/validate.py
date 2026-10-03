@@ -49,7 +49,37 @@ def validate(root=ROOT):
         require(match is not None and plugin + match[1] in snapshot, 'invalid-portable-hook-command')
         timeout = handler.get('timeout')
         require(type(timeout) in (int, float) and 0 < timeout <= 5, 'invalid-hook-timeout')
-    skills = sorted(name for name in snapshot if name.startswith(plugin + 'skills/') and name.endswith('/SKILL.md'))
+    # Claude Code installs the repository root as the plugin, so the Codex
+    # hooks/hooks.json under plugins/ultra-hook is never auto-loaded there.
+    claude = json.loads(snapshot['.claude-plugin/plugin.json'])
+    require(claude.get('name') == 'ultra-hook' and claude.get('version') == version, 'claude-manifest-mismatch')
+    require(claude.get('skills') == './' + plugin + 'skills/' and
+            claude.get('hooks') == './' + plugin + 'hooks/claude-hooks.json', 'unexpected-claude-components')
+    claude_market = json.loads(snapshot['.claude-plugin/marketplace.json'])
+    claude_entries = claude_market.get('plugins')
+    require(claude_market.get('name') == 'ultra-hook' and isinstance(claude_entries, list) and len(claude_entries) == 1
+            and claude_entries[0].get('name') == 'ultra-hook' and claude_entries[0].get('source') == './',
+            'unexpected-claude-marketplace')
+    require(not any(name.startswith('hooks/') for name in snapshot), 'claude-root-hooks-autoload')
+    claude_hooks = json.loads(snapshot[plugin + 'hooks/claude-hooks.json'])['hooks']
+    require(set(claude_hooks) == set(hooks), 'unexpected-claude-hook-events')
+
+    def scripts(definition, pattern):
+        found = []
+        for event, groups in definition.items():
+            for group in groups:
+                for handler in group['hooks']:
+                    match = re.fullmatch(pattern, handler.get('command') or '')
+                    require(handler.get('type') == 'command' and match is not None, 'invalid-claude-hook-command')
+                    timeout = handler.get('timeout')
+                    require(type(timeout) in (int, float) and 0 < timeout <= 5, 'invalid-hook-timeout')
+                    found.append((event, match[1]))
+        return sorted(found)
+    claude_scripts = scripts(claude_hooks, r'node "\$\{CLAUDE_PLUGIN_ROOT\}/' + re.escape(plugin) +
+                             r'(hooks/[a-z-]+\.(?:js|cjs))" --runtime=claude')
+    require(claude_scripts == scripts(hooks, r'node "\$\{PLUGIN_ROOT\}/(hooks/[a-z-]+\.(?:js|cjs))"'),
+            'claude-hooks-differ-from-codex')
+    skills =sorted(name for name in snapshot if name.startswith(plugin + 'skills/') and name.endswith('/SKILL.md'))
     require({PurePosixPath(name).parent.name for name in skills} == {'ultra-hook', 'agentcontroller'} and
             len(skills) == 2, 'unexpected-skills')
     for name in skills:
@@ -89,7 +119,8 @@ def validate(root=ROOT):
                 checked = subprocess.run(['node', '--check', str(file)], capture_output=True,
                                          timeout=15, env=env, shell=False)
                 require(checked.returncode == 0, 'invalid-javascript-syntax')
-    return {'valid': True, 'version': version, 'skills': len(skills), 'hooks': len(handlers)}
+    return {'valid': True, 'version': version, 'skills': len(skills), 'hooks': len(handlers),
+            'claudeHooks': len(claude_scripts)}
 
 
 def main(argv=None):

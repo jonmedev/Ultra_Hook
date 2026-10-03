@@ -27,6 +27,10 @@ Discover the connected AgentController MCP tools through the current tool catalo
 tool search. Read only the schemas needed for the target and flow. Tool names, selectors
 and supported operations can differ across versions and operating systems; do not
 assume an executable path, bridge, tray application or server connection.
+In Claude Code the tools are named `mcp__agentcontroller__<tool>` and can be deferred
+until loaded through tool search; load the ones a flow needs in one request. The
+server is registered per runtime: a Codex registration does not make it available
+to Claude Code, where `claude mcp add` registers the same local launcher.
 
 Use the available readiness and capability tools, such as `check_permissions` and
 `inspect_capabilities`, then confirm access to the actual target with a snapshot or

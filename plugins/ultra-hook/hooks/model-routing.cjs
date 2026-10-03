@@ -87,7 +87,47 @@ function escalationText() {
     `Detailed protocol (read only when needed): ${POLICY_PATH}`;
 }
 
-function contextFor(eventName, kind = "team") {
+// Claude Code exposes no local model catalog and no per-call reasoning effort.
+// Name only the tier aliases; the Agent tool's own model option stays authoritative.
+function claudeContextFor(eventName, kind) {
+  if (eventName === "SessionStart") {
+    return "Ultra Hook: small work stays direct. Subagents only for authorized useful independent work; no fixed headcount. " +
+      "Preserve the session model. Prefer the least costly adequate agent model; a stronger one requires task evidence and a bounded attempt. " +
+      "SendMessage continues an existing agent with its context; a new Agent call starts fresh. Native permissions and explicit task limits win. " +
+      "UI validation requires AgentController and real target evidence; unavailable UI transport is not a pass. " +
+      `Read the full protocol only when coordinating or escalating: ${POLICY_PATH}`;
+  }
+  if (eventName === "UserPromptSubmit") {
+    if (kind === "escalation") {
+      return "Ultra Hook escalation: task-scoped escalation may use the strongest model the Agent tool lists when justified and within the user's authorization. " +
+        "Choose a stronger model, a defined higher-effort agent type or independent branches from evidence; respect explicit model/effort caps and budgets. " +
+        "Missing data, permissions or services are blockers, not reasons for more models. " +
+        "One bounded costly attempt, then reassess; do not repeat maximum-effort calls without new evidence. " +
+        "The lead coordinates ownership. SendMessage does not change an existing agent's model or effort; " +
+        "a new specialist needs a self-contained handoff and the previous writer stopped. Do not change the session model or settings. " +
+        `Detailed protocol (read only when needed): ${POLICY_PATH}`;
+    }
+    return "Ultra Hook team request: delegate only authorized branches whose benefit outweighs startup and integration cost. " +
+      "Start with the smallest useful team; add capacity only for independent work or necessary review. " +
+      "Continue an existing agent via SendMessage instead of respawning it; the lead integrates and honors explicit task limits. " +
+      `Read coordination details only if needed: ${POLICY_PATH}`;
+  }
+  if (eventName === "PreToolUse") {
+    return "Ultra Hook spawn check: mechanical: haiku; implementation: sonnet; architecture: opus, only where the Agent tool lists them. " +
+      "Live tool options override hints; preserve the session model and explicit caps. " +
+      "Continue a suitable agent via SendMessage; use a new agent for a changed model or independent scope. " +
+      "A fork inherits the conversation and the lead's model and ignores overrides; a fresh agent needs a self-contained assignment. " +
+      "Assign owned files, cwd, what is already ruled out, acceptance check and a bounded objective. " +
+      "Justify each extra agent against context/startup/integration cost. Reserve useful capacity, not a fixed headcount. " +
+      "Effort comes from the agent definition, not the call; do not claim one you cannot set. " +
+      "After one costly attempt reassess before another. For transfer, stop the old writer and inspect changes. " +
+      `Do not change permissions. Full protocol if needed: ${POLICY_PATH}`;
+  }
+  return "";
+}
+
+function contextFor(eventName, kind = "team", runtime = "codex") {
+  if (runtime === "claude") return claudeContextFor(eventName, kind);
   if (eventName === "SessionStart") {
     return "Ultra Hook: small work stays direct. Native teams only for authorized useful independent work; no fixed headcount. " +
       "Preserve the chosen leader. Prefer the least costly adequate role/effort; max/ultra require task evidence and a bounded attempt. " +

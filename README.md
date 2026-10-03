@@ -1,8 +1,9 @@
 # Ultra Hook
 
-A Codex plugin for implementation, debugging, reviews and research. It helps Codex
-choose a proportionate workflow, coordinate useful native teammates and verify the
-result. Small tasks stay direct.
+A plugin for Codex and Claude Code for implementation, debugging, reviews and
+research. It helps the agent choose a proportionate workflow, coordinate useful
+native teammates and verify the result. Small tasks stay direct. The sections below
+describe Codex; [Claude Code](#claude-code) has its own short installation.
 
 **[Quick start](docs/GETTING_STARTED.md)** · **[Releases](https://github.com/jonmedev/Ultra_Hook/releases)**
 
@@ -81,6 +82,31 @@ it does not force a team or maximum reasoning for every request.
 Hook checks are heuristic and do not replace Codex's security settings. The plugin
 does not unlock models, enforce a spending cap or claim measured savings.
 
+## Claude Code
+
+The same two skills and five hook scripts run in Claude Code from this repository's
+`.claude-plugin` manifests. It needs Claude Code and Node.js; the Python installer,
+doctor and `/hooks` trust review above are Codex-only. In a terminal:
+
+```sh
+claude plugin marketplace add jonmedev/Ultra_Hook
+claude plugin install ultra-hook@ultra-hook
+```
+
+Start a new session and invoke `/ultra-hook:ultra-hook` followed by your task.
+Differences from Codex:
+
+- Routing hints name the `Agent` tool's model aliases and `SendMessage`; no model
+  cache is read and reasoning effort comes from the agent definition.
+- Hard resets, forced cleaning and history-replacing pushes ask for your
+  confirmation instead of being denied. Recognized secret access is still denied.
+- Secret and Git checks also cover the `PowerShell`, `NotebookEdit` and `Grep` tools.
+- AgentController is registered separately for each runtime, for example
+  `claude mcp add --scope user agentcontroller -- <launcher>` with the launcher the
+  complete setup prepared. A Codex registration is not visible to Claude Code.
+
+Remove it with `claude plugin uninstall ultra-hook@ultra-hook`.
+
 ## AgentController: optional for UI validation
 
 **[AgentController is developed by Kasempiternal](https://github.com/Kasempiternal/agentcontroller).**
@@ -120,7 +146,7 @@ This is an independent adaptation, not an official OpenAI, CAS or AgentControlle
 ```sh
 python -B scripts/validate.py
 python -B -m unittest discover -s tests
-node --test plugins/ultra-hook/hooks/tests/team-routing.test.cjs plugins/ultra-hook/hooks/tests/safety-windows.test.cjs plugins/ultra-hook/hooks/tests/security-boundaries.test.cjs
+node --test plugins/ultra-hook/hooks/tests/team-routing.test.cjs plugins/ultra-hook/hooks/tests/safety-windows.test.cjs plugins/ultra-hook/hooks/tests/security-boundaries.test.cjs plugins/ultra-hook/hooks/tests/claude-runtime.test.cjs
 python -B scripts/audit_release.py --git-staged --git-history --allow-github-noreply-identities
 python -B scripts/build_release.py --output ../ultra-hook-release
 ```

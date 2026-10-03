@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 "use strict";
 
-const { readEvent, deny } = require("./hook-io.cjs");
+const { readEvent, deny, ask, runtime } = require("./hook-io.cjs");
 const { expandedSegments, executableName, gitSubcommand } = require("./safety-command-parser.cjs");
 
 function gitOperation(words, start) {
@@ -22,9 +22,13 @@ function inspectCommand(command) {
   return null;
 }
 
+// PowerShell is Claude Code's native Windows shell tool; the parser already
+// recognizes its literal cmdlets and nested hosts.
+const SHELL_TOOLS = ["Bash", "exec_command", "PowerShell"];
+
 function check(payload) {
   const tool = String(payload?.tool_name || "").split(".").at(-1);
-  if (payload?.hook_event_name !== "PreToolUse" || !["Bash", "exec_command"].includes(tool)) return null;
+  if (payload?.hook_event_name !== "PreToolUse" || !SHELL_TOOLS.includes(tool)) return null;
   const command = payload?.tool_input?.command ?? payload?.tool_input?.cmd;
   return inspectCommand(command);
 }
@@ -35,7 +39,9 @@ function destructiveOperation(command) {
     const subcommand = gitSubcommand(words);
     const args = words.slice((subcommand?.index ?? 0) + 1);
     if (subcommand?.name === "reset" && args.includes("--hard")) return "git reset --hard";
-    if (subcommand?.name === "clean" && args.some(arg => /^-[a-z]*f[a-z]*$/.test(arg) || arg === "--force")) return "git clean --force";
+    // A dry run only lists candidates, even when combined with --force.
+    const dryRun = args.some(arg => /^-[a-z]*n[a-z]*$/.test(arg) || arg === "--dry-run");
+    if (subcommand?.name === "clean" && !dryRun && args.some(arg => /^-[a-z]*f[a-z]*$/.test(arg) || arg === "--force")) return "git clean --force";
     if (subcommand?.name === "push" && args.some(arg => /^(?:--force(?:=|$)|--mirror$|-[a-z]*f[a-z]*$|\+)/.test(arg))) return "git push with history replacement";
   }
   return null;
@@ -44,11 +50,15 @@ function destructiveOperation(command) {
 async function main() { try {
   const payload = await readEvent();
   const tool = String(payload?.tool_name || "").split(".").at(-1);
-  if (payload.hook_event_name !== "PreToolUse" || !["Bash", "exec_command"].includes(tool)) return;
+  if (payload.hook_event_name !== "PreToolUse" || !SHELL_TOOLS.includes(tool)) return;
   const command = payload.tool_input?.command ?? payload.tool_input?.cmd;
   if (typeof command !== "string" || !command.trim()) return deny();
   const destructive = destructiveOperation(command);
-  if (destructive) return deny(`Ultra Hook blocks ${destructive}. Preserve work and use a reversible operation; do not evade the hook through another tool.`);
+  if (destructive) {
+    // Claude Code can put the decision to the user; Codex only supports a denial.
+    if (runtime() === "claude") return ask(`Ultra Hook: ${destructive} discards work or replaces history. Approve only if this exact operation was requested.`);
+    return deny(`Ultra Hook blocks ${destructive}. Preserve work and use a reversible operation; do not evade the hook through another tool.`);
+  }
   const operation = check(payload);
   if (!operation) return;
   // Only a known operation label enters the response. Commands can include

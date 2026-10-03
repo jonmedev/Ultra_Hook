@@ -33,11 +33,24 @@ function readEvent() {
   });
 }
 
-function deny(reason = "Ultra Hook could not safely inspect this input. The tool call is blocked; do not retry through another tool to bypass it.") {
+// The Claude Code hook file passes --runtime=claude. Anything else is Codex, so an
+// unknown host never receives a decision it may not implement.
+function runtime(argv = process.argv) {
+  return argv.includes("--runtime=claude") ? "claude" : "codex";
+}
+
+function decide(permissionDecision, reason) {
   process.stdout.write(JSON.stringify({hookSpecificOutput: {
-    hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: reason
+    hookEventName: "PreToolUse", permissionDecision, permissionDecisionReason: reason
   }}) + "\n");
 }
+
+function deny(reason = "Ultra Hook could not safely inspect this input. The tool call is blocked; do not retry through another tool to bypass it.") {
+  decide("deny", reason);
+}
+
+// Codex does not implement PreToolUse ask; callers use it for Claude Code only.
+function ask(reason) { decide("ask", reason); }
 
 function readBoundedFile(filename, maximum = MAX_INPUT_BYTES) {
   const initial = fs.lstatSync(filename);
@@ -56,4 +69,4 @@ function readBoundedFile(filename, maximum = MAX_INPUT_BYTES) {
   } finally { fs.closeSync(fd); }
 }
 
-module.exports = { readEvent, deny, readBoundedFile, MAX_INPUT_BYTES };
+module.exports = { readEvent, deny, ask, runtime, readBoundedFile, MAX_INPUT_BYTES };

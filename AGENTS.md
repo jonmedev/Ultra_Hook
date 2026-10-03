@@ -9,6 +9,10 @@ unrelated plugins. Do not write trust hashes or bypass native hook trust. Keep
 AgentController optional to installation and required for validating UI work;
 unavailable targets remain unvalidated. CLI/library changes use their actual tests.
 
+Claude Code loads the repository root as the plugin through `.claude-plugin`, with
+`claude-hooks.json` running the same scripts under `--runtime=claude`. Keep both
+hook files on the same script set and never add a root `hooks/` directory.
+
 Keep skills concise and role-based; no fixed teams or implicit maximum-effort loops.
 Any change to packaging must pass the release audit and isolated installation tests.
 Test with `python -B -m unittest discover -s tests` and the Node tests under

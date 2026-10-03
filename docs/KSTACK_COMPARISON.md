@@ -18,7 +18,7 @@ or effort rules would not establish equivalent Codex behavior.
 | Review | Panels vary with risk; several lenses for consequential changes | Review actual uncertainty; no compulsory panel or reviewer agreement as proof |
 | Validation | Verification follows the affected surface; UI transports vary by platform | Real CLI/API/library checks; AgentController required for UI, unavailable target reported pending |
 | Spending | Named presets and explicit high-spend mode | Least adequate role/effort, evidence-based escalation within user authorization; no measured savings claim |
-| Safety hooks | Claude hook protocol includes approval requests | Keep supported Codex decisions and regression tests; do not port unsupported `ask` responses |
+| Safety hooks | Claude hook protocol includes approval requests | Keep supported Codex decisions and regression tests; use `ask` only when the hook runs in Claude Code |
 | Resumption | Playbook rebuilds state from repo and session artifacts | Compare scoped handoff to current diff and evidence; avoid collecting private transcripts |
 
 The useful additions are a clearer path from installation to first task, explicit

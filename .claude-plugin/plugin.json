@@ -1,0 +1,10 @@
+{
+  "name": "ultra-hook",
+  "version": "0.2.0",
+  "description": "Proportionate agent teamwork, compact lifecycle hints and AgentController UI validation for Claude Code.",
+  "author": { "name": "jonmedev" },
+  "license": "MIT",
+  "homepage": "https://github.com/jonmedev/Ultra_Hook",
+  "skills": "./plugins/ultra-hook/skills/",
+  "hooks": "./plugins/ultra-hook/hooks/claude-hooks.json"
+}

@@ -23,6 +23,8 @@ _spec.loader.exec_module(audit)
 # Additions are a deliberate release-policy change, not a consequence of a suffix.
 RELEASE_FILES = frozenset('''
 .agents/plugins/marketplace.json
+.claude-plugin/marketplace.json
+.claude-plugin/plugin.json
 .gitattributes
 .github/dependabot.yml
 .github/workflows/ci.yml
@@ -42,6 +44,7 @@ docs/KSTACK_COMPARISON.md
 docs/RELEASING.md
 docs/RELEASE_TEMPLATE.md
 plugins/ultra-hook/.codex-plugin/plugin.json
+plugins/ultra-hook/hooks/claude-hooks.json
 plugins/ultra-hook/hooks/hook-io.cjs
 plugins/ultra-hook/hooks/hooks.json
 plugins/ultra-hook/hooks/model-routing.cjs
@@ -51,6 +54,7 @@ plugins/ultra-hook/hooks/safety-command-parser.cjs
 plugins/ultra-hook/hooks/sensitive-command-approval.cjs
 plugins/ultra-hook/hooks/session-start.cjs
 plugins/ultra-hook/hooks/team-spawn.cjs
+plugins/ultra-hook/hooks/tests/claude-runtime.test.cjs
 plugins/ultra-hook/hooks/tests/safety-windows.test.cjs
 plugins/ultra-hook/hooks/tests/security-boundaries.test.cjs
 plugins/ultra-hook/hooks/tests/team-routing.test.cjs

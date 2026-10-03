@@ -4,6 +4,9 @@ Ultra Hook helps Codex implement, debug, review and research with appropriate
 verification and useful native teammates. Small tasks stay direct. It preserves
 your chosen leader and permissions. It does not unlock models or guarantee savings.
 
+This guide covers Codex. For Claude Code, follow the
+[two-command installation](../README.md#claude-code) instead.
+
 ## Install the complete setup
 
 Download the [setup ZIP](https://github.com/jonmedev/Ultra_Hook/releases/download/v0.2.0/ultra-hook-0.2.0.zip),

@@ -1,5 +1,8 @@
 # Native teams and model selection
 
+The principles below apply to both runtimes. Tool names in the text are Codex's;
+[runtime mapping](#runtime-mapping) gives the Claude Code equivalents and limits.
+
 ## Start with a useful division of work
 
 For each proposed worker, identify a distinct deliverable, its acceptance check and
@@ -23,11 +26,11 @@ Choose the newest supported version within the appropriate capability family, su
 to the user's explicit choice, spending or latency limits, and the task's needs.
 Treat family labels as guidance only when the live catalog identifies those tiers:
 
-| Work | Starting capability and effort |
-| --- | --- |
-| Mechanical work that warrants an agent | Lightweight tier, such as Luna; low or medium |
-| Implementation, diagnosis, tests and focused review | Workhorse tier, such as Sol; medium or high |
-| Difficult architecture or consequential uncertainty | Strong reasoning tier, such as Astra; high or xhigh |
+| Work | Starting capability and effort | Codex example | Claude Code example |
+| --- | --- | --- | --- |
+| Mechanical work that warrants an agent | Lightweight tier; low or medium | Luna | Haiku |
+| Implementation, diagnosis, tests and focused review | Workhorse tier; medium or high | Sol | Sonnet |
+| Difficult architecture or consequential uncertainty | Strong reasoning tier; high or xhigh | Astra | Opus |
 
 Select the least costly adequate option using available capability and price information;
 do not infer exact cost from a family name. Do not spawn merely to reach a nominally
@@ -98,3 +101,26 @@ unchanged maximum-effort request. Stop redundant branches when their question is
 Use normal role choices for subsequent ordinary work; do not pretend follow-up changes
 an existing agent's settings. Report usage only when measured: turn limits, timeouts and
 shorter prompts are not monetary caps or proof of billed-token savings.
+
+## Runtime mapping
+
+The same decisions use different tools. Use the names the current session exposes;
+do not call a tool from the other runtime or assume a parameter it does not list.
+
+| Decision | Codex | Claude Code |
+| --- | --- | --- |
+| Create a worker | `spawn_agent` | `Agent` |
+| Steer or reactivate a worker with its context | `send_message`, `followup_task` | `SendMessage` to the agent's name or ID |
+| Inherit the lead's conversation | `fork_turns` set to `all` | `subagent_type` set to `fork`; a model override is ignored |
+| Start from a fresh context | `fork_turns` set to `none` or a small count | Any other agent type, with a self-contained brief |
+| Choose a model | Model ID from the live catalog | The `model` aliases the `Agent` tool lists |
+| Choose reasoning effort | Per-call override where supported | Fixed by the agent definition; pick a defined agent type |
+| Isolate concurrent edits | Separate checkouts | `isolation` set to `worktree` |
+
+In Claude Code a worker's final report returns to the lead, not to the user, and
+workers run in the background: wait for the completion notice instead of predicting
+a result. There is no local model catalog to read; an alias the tool does not list
+is unavailable. When no defined agent type carries the needed effort, say so rather
+than claiming an effort the call cannot set. `max` and `ultra` are Codex effort
+names; in Claude Code escalation means a stronger listed model, a defined
+higher-effort agent type or independent branches, under the same authorization rules.

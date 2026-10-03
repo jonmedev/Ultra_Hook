@@ -89,6 +89,17 @@ test("search patterns are distinct from files while pattern files stay protected
   }
 });
 
+test("environment checks separate sensitive names from ordinary ones", () => {
+  for (const command of ["printenv", "printenv | sort", "printenv -0", "printenv API_TOKEN", "printenv HOME AUTH_SECRET",
+    "echo $AUTH_TOKEN", "echo $OAUTH_CLIENT", "printf '%s' $PRIVATE_VALUE", "Get-Item Env:AUTH_HEADER"]) {
+    assert.equal(secrets.checkBashCommand(command).blocked,true,command);
+  }
+  for (const command of ["printenv PATH", "printenv HOME LANG", "echo $GIT_AUTHOR_NAME", "printf '%s' $AUTHOR",
+    "Get-Item Env:GIT_AUTHOR_EMAIL", "echo $HOME"]) {
+    assert.equal(secrets.checkBashCommand(command).blocked,false,command);
+  }
+});
+
 test("model hints cannot read hardlinks or oversized files", () => {
   const directory=fs.mkdtempSync(path.join(os.tmpdir(),"ultra-boundary-test-"));
   try {

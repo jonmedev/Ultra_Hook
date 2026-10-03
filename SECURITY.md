@@ -75,6 +75,17 @@ hashes; unknown or modified destination contents are not overwritten. These chec
 are integrity checks, not a sandbox against upstream code or a same-user attacker.
 Existing external registrations are retained rather than silently replaced.
 
+## Claude Code
+
+Claude Code loads the same scripts through `plugins/ultra-hook/hooks/claude-hooks.json`,
+which passes `--runtime=claude`. Without that flag every script behaves as in Codex.
+Claude Code implements PreToolUse `ask`, so explicit destructive Git commands request
+confirmation there instead of a denial; uninspectable input and recognized secret
+access are still denied. The checks also see the `PowerShell`, `NotebookEdit` and
+`Grep` tools. They remain literal recognizers: other tools, MCP servers and a search
+without a path are not inspected. Claude Code has no per-hook trust review; installing
+the plugin enables its hooks, so inspect the source first.
+
 ## Verify a download
 
 The quick-start native commands fetch Git source at the specified release tag.

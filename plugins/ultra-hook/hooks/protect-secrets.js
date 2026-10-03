@@ -11,7 +11,8 @@
  *
  * Installed through this plugin's hook configuration. Supported inputs include
  * Read/Edit/Write file_path, Bash command, exec_command cmd and apply_patch
- * command headers. This literal recognizer does not interpret arbitrary shell
+ * command headers, plus Claude Code's PowerShell command, NotebookEdit
+ * notebook_path and Grep path/glob. This literal recognizer does not interpret arbitrary shell
  * scripts and is not a security boundary.
  */
 
@@ -31,6 +32,7 @@ const SENSITIVE_FILES = [
   { level: 'critical', id: 'auth-json', regex: /(?:^|\/)auth\.json$/, reason: 'Authentication state contains credentials' },
   { level: 'critical', id: 'git-credentials', regex: /(?:^|\/)\.git-credentials$/, reason: 'Git credential store' },
   { level: 'critical', id: 'gh-auth', regex: /(?:^|\/)(?:gh|github-cli)\/hosts\.ya?ml$/, reason: 'GitHub CLI credential store' },
+  { level: 'critical', id: 'dot-credentials', regex: /(?:^|\/)\.credentials\.json$/, reason: 'Agent CLI credential store' },
   { level: 'critical', id: 'gcloud-adc', regex: /(?:^|\/)application_default_credentials\.json$/, reason: 'Cloud application credentials' },
   // CRITICAL
   { level: 'critical', id: 'env-file',           regex: /(?:^|\/)\.env(?:\.[^/]*)?$/,                    reason: '.env file contains secrets' },
@@ -77,9 +79,12 @@ const BASH_PATTERNS = [
   { level: 'critical', id: 'cat-aws-creds',      regex: /\b(cat|less|head|tail|more)\s+[^|;]*\.aws\/credentials/i,         reason: 'Reading AWS credentials' },
 
   // HIGH - Environment exposure
-  { level: 'high', id: 'env-dump',               regex: /\bprintenv\b|(?:^|[;&|]\s*)env\s*(?:$|[;&|])/,                    reason: 'Environment dump may expose secrets' },
-  { level: 'high', id: 'echo-secret-var',        regex: /\becho\b[^;|&]*\$\{?[A-Za-z_]*(?:SECRET|KEY|TOKEN|PASSWORD|PASSW|CREDENTIAL|API_KEY|AUTH|PRIVATE)[A-Za-z_]*\}?/i, reason: 'Echoing secret variable' },
-  { level: 'high', id: 'printf-secret-var',      regex: /\bprintf\b[^;|&]*\$\{?[A-Za-z_]*(?:SECRET|KEY|TOKEN|PASSWORD|CREDENTIAL|API_KEY|AUTH|PRIVATE)[A-Za-z_]*\}?/i, reason: 'Printing secret variable' },
+  { level: 'high', id: 'env-dump',               regex: /\bprintenv\b(?!\s+[A-Za-z_])|(?:^|[;&|]\s*)env\s*(?:$|[;&|])/,    reason: 'Environment dump may expose secrets' },
+  // A single named variable is a dump only when its name looks sensitive.
+  // AUTHOR (as in GIT_AUTHOR_NAME) is not an authentication name.
+  { level: 'high', id: 'printenv-secret-var',    regex: /\bprintenv\b[^;|&]*\s[A-Za-z_]*(?:SECRET|KEY|TOKEN|PASSWORD|PASSW|CREDENTIAL|API_KEY|AUTH(?!OR)|PRIVATE)[A-Za-z_]*/i, reason: 'Printing secret variable' },
+  { level: 'high', id: 'echo-secret-var',        regex: /\becho\b[^;|&]*\$\{?[A-Za-z_]*(?:SECRET|KEY|TOKEN|PASSWORD|PASSW|CREDENTIAL|API_KEY|AUTH(?!OR)|PRIVATE)[A-Za-z_]*\}?/i, reason: 'Echoing secret variable' },
+  { level: 'high', id: 'printf-secret-var',      regex: /\bprintf\b[^;|&]*\$\{?[A-Za-z_]*(?:SECRET|KEY|TOKEN|PASSWORD|CREDENTIAL|API_KEY|AUTH(?!OR)|PRIVATE)[A-Za-z_]*\}?/i, reason: 'Printing secret variable' },
   { level: 'high', id: 'cat-secrets-file',       regex: /\b(cat|less|head|tail|more)\s+[^|;]*(credentials?|secrets?)\.(json|ya?ml|toml)/i, reason: 'Reading secrets file' },
   { level: 'high', id: 'cat-netrc',              regex: /\b(cat|less|head|tail|more)\s+[^|;]*\.netrc/i,                    reason: 'Reading .netrc credentials' },
   { level: 'high', id: 'source-env',             regex: /\bsource\s+[^|;]*\.env\b|(?:^|[;&|]\s*)\.\s+[^|;]*\.env\b|^\.\s+[^|;]*\.env\b/i, reason: 'Sourcing .env loads secrets' },
@@ -150,7 +155,7 @@ function checkEnvProvider(words, threshold) {
       // An empty provider path or a wildcard selector may enumerate secrets.
       // Inspect only the literal name; never resolve environment variable values.
       if (!name || /[*?\[\]]/.test(name)) return BASH_PATTERNS.find(pattern => pattern.id === 'env-dump');
-      if (/(?:SECRET|KEY|TOKEN|PASSWORD|PASSW|CREDENTIAL|AUTH|PRIVATE)/i.test(name)) {
+      if (/(?:SECRET|KEY|TOKEN|PASSWORD|PASSW|CREDENTIAL|AUTH(?!OR)|PRIVATE)/i.test(name)) {
         return { level: 'high', id: 'env-secret-variable', reason: 'Reading a sensitive environment variable' };
       }
     }
@@ -253,12 +258,24 @@ function patchPaths(patch) {
   });
 }
 
+const FILE_TOOLS = ['Read', 'Edit', 'Write'];
+const SHELL_TOOLS = ['Bash', 'exec_command', 'PowerShell'];
+
 function check(toolName, toolInput, safetyLevel = SAFETY_LEVEL) {
   toolName = String(toolName || '').split('.').at(-1);
-  if (['Read', 'Edit', 'Write'].includes(toolName)) {
+  if (FILE_TOOLS.includes(toolName)) {
     return checkFilePath(toolInput?.file_path, safetyLevel);
   }
-  if (['Bash', 'exec_command'].includes(toolName)) {
+  if (toolName === 'NotebookEdit') return checkFilePath(toolInput?.notebook_path, safetyLevel);
+  if (toolName === 'Grep') {
+    // Both operands are optional. A glob such as **/.env selects the same files.
+    for (const operand of [toolInput?.path, toolInput?.glob]) {
+      const result = checkFilePath(operand, safetyLevel);
+      if (result.blocked) return result;
+    }
+    return { blocked: false, pattern: null };
+  }
+  if (SHELL_TOOLS.includes(toolName)) {
     return checkBashCommand(toolInput?.command ?? toolInput?.cmd, safetyLevel);
   }
   if (toolName === 'apply_patch') {
@@ -276,18 +293,23 @@ async function main() {
     const { tool_name, tool_input } = data;
     if (data.hook_event_name !== 'PreToolUse') return console.log('{}');
     const tool = String(tool_name || '').split('.').at(-1);
-    if (!['Read', 'Edit', 'Write', 'Bash', 'exec_command', 'apply_patch'].includes(tool)) {
+    if (![...FILE_TOOLS, ...SHELL_TOOLS, 'NotebookEdit', 'Grep', 'apply_patch'].includes(tool)) {
       return console.log('{}');
     }
 
-    const value = ['Read', 'Edit', 'Write'].includes(tool) ? tool_input?.file_path :
-      typeof tool_input === 'string' ? tool_input : tool_input?.command ?? tool_input?.cmd ?? tool_input?.patch;
-    if (typeof value !== 'string' || !value.trim()) return deny();
+    // Grep has no required path; every other inspected tool must name its target.
+    if (tool !== 'Grep') {
+      const value = FILE_TOOLS.includes(tool) ? tool_input?.file_path :
+        tool === 'NotebookEdit' ? tool_input?.notebook_path :
+        typeof tool_input === 'string' ? tool_input : tool_input?.command ?? tool_input?.cmd ?? tool_input?.patch;
+      if (typeof value !== 'string' || !value.trim()) return deny();
+    }
     const result = check(tool_name, tool_input);
 
     if (result.blocked) {
       const p = result.pattern;
-      const action = { Read: 'read', Edit: 'modify', Write: 'write to', Bash: 'execute', exec_command: 'execute', apply_patch: 'modify' }[tool];
+      const action = { Read: 'read', Edit: 'modify', Write: 'write to', Bash: 'execute', exec_command: 'execute', PowerShell: 'execute',
+        NotebookEdit: 'modify', Grep: 'search', apply_patch: 'modify' }[tool];
       return deny(`${EMOJIS[p.level]} [${p.id}] Cannot ${action}: ${p.reason}. Use a redacted fixture; do not bypass this denial through another tool.`);
     }
     console.log('{}');

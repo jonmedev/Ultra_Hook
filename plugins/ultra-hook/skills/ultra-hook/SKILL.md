@@ -1,6 +1,6 @@
 ---
 name: ultra-hook
-description: Implement, debug, review or research with evidence from the affected surface and proportionate native Codex teamwork. Use for Ultra Hook requests and substantial engineering work where coordinated independent work helps; keep small changes direct.
+description: Implement, debug, review or research with evidence from the affected surface and proportionate native agent teamwork in Codex or Claude Code. Use for Ultra Hook requests and substantial engineering work where coordinated independent work helps; keep small changes direct.
 ---
 
 # Ultra Hook
@@ -39,7 +39,8 @@ Do not turn a bounded task into an open-ended optimization loop.
 Load only the reference needed for the current decision:
 
 - Before delegating or escalating, read [teams and models](references/teams-and-models.md).
-  It defines live-catalog selection, continuing dialogue, ownership and escalation.
+  It defines live-catalog selection, continuing dialogue, ownership and escalation,
+  and maps them to the collaboration tools of Codex and Claude Code.
 - For architecture, debugging, code review or measured optimization, consult the
   relevant section of [engineering](references/engineering.md).
 - For a research assignment, read [research](references/research.md).

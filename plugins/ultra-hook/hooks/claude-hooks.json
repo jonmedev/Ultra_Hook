@@ -1,0 +1,12 @@
+{
+  "description": "Ultra Hook for Claude Code: compact collaboration hints and literal sensitive-operation checks; native permissions remain authoritative.",
+  "hooks": {
+    "SessionStart": [{ "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/plugins/ultra-hook/hooks/session-start.cjs\" --runtime=claude", "timeout": 5 }] }],
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/plugins/ultra-hook/hooks/prompt-routing.cjs\" --runtime=claude", "timeout": 5 }] }],
+    "PreToolUse": [
+      { "matcher": "Read|Edit|Write|NotebookEdit|Grep|Bash|PowerShell", "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/plugins/ultra-hook/hooks/protect-secrets.js\" --runtime=claude", "timeout": 5 }] },
+      { "matcher": "Bash|PowerShell", "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/plugins/ultra-hook/hooks/sensitive-command-approval.cjs\" --runtime=claude", "timeout": 5 }] },
+      { "matcher": "Agent|Task", "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/plugins/ultra-hook/hooks/team-spawn.cjs\" --runtime=claude", "timeout": 5 }] }
+    ]
+  }
+}
