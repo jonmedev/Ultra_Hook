@@ -10,7 +10,7 @@ has its own plugin-only commands and differences.
 
 ## Install the complete setup
 
-Download the [setup ZIP](https://github.com/jonmedev/Ultra_Hook/releases/download/v0.4.0/ultra-hook-0.4.0.zip),
+Download the [setup ZIP](https://github.com/jonmedev/Ultra_Hook/releases/download/v0.5.0/ultra-hook-0.5.0.zip),
 [verify it](../SECURITY.md#verify-a-download), and extract it into a permanent folder.
 On Windows double-click `Install.cmd`; on macOS/Linux run `sh install.sh` there.
 Both launchers run the same supported command:
@@ -55,7 +55,7 @@ For an existing Ultra Hook/CAS installation, read [updates](#update-or-remove) f
 Open **PowerShell on Windows** or **Terminal on macOS/Linux**, then run each line:
 
 ```sh
-codex plugin marketplace add jonmedev/Ultra_Hook --ref v0.4.0
+codex plugin marketplace add jonmedev/Ultra_Hook --ref v0.5.0
 codex plugin add ultra-hook@ultra-hook
 ```
 

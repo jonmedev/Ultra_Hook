@@ -45,6 +45,7 @@ docs/RELEASING.md
 docs/RELEASE_TEMPLATE.md
 plugins/ultra-hook/.codex-plugin/plugin.json
 plugins/ultra-hook/hooks/claude-hooks.json
+plugins/ultra-hook/hooks/external-specialist.cjs
 plugins/ultra-hook/hooks/hook-io.cjs
 plugins/ultra-hook/hooks/hooks.json
 plugins/ultra-hook/hooks/model-routing.cjs
@@ -56,6 +57,7 @@ plugins/ultra-hook/hooks/session-mode.cjs
 plugins/ultra-hook/hooks/session-start.cjs
 plugins/ultra-hook/hooks/team-spawn.cjs
 plugins/ultra-hook/hooks/tests/claude-runtime.test.cjs
+plugins/ultra-hook/hooks/tests/external-specialist.test.cjs
 plugins/ultra-hook/hooks/tests/modes.test.cjs
 plugins/ultra-hook/hooks/tests/safety-windows.test.cjs
 plugins/ultra-hook/hooks/tests/security-boundaries.test.cjs
@@ -66,6 +68,7 @@ plugins/ultra-hook/skills/agentcontroller/SKILL.md
 plugins/ultra-hook/skills/agentcontroller/references/windows.md
 plugins/ultra-hook/skills/ultra-hook/SKILL.md
 plugins/ultra-hook/skills/ultra-hook/references/engineering.md
+plugins/ultra-hook/skills/ultra-hook/references/external-specialist.md
 plugins/ultra-hook/skills/ultra-hook/references/research.md
 plugins/ultra-hook/skills/ultra-hook/references/teams-and-models.md
 scripts/audit_release.py

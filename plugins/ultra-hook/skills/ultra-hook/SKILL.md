@@ -60,6 +60,9 @@ Load only the reference needed for the current decision:
 - For architecture, debugging, code review or measured optimization, consult the
   relevant section of [engineering](references/engineering.md).
 - For a research assignment, read [research](references/research.md).
+- Before sending text to another provider's model, read
+  [external specialist](references/external-specialist.md). It is optional, takes a
+  slot of the agent cap and sees only the brief you write.
 - For UI behavior or visual changes, use our [AgentController integration skill](../agentcontroller/SKILL.md)
   for [Kasempiternal's external tool](https://github.com/Kasempiternal/agentcontroller)
   ([upstream downloads](https://github.com/Kasempiternal/agentcontroller/releases)).

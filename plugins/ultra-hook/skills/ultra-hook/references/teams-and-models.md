@@ -32,6 +32,10 @@ Treat family labels as guidance only when the live catalog identifies those tier
 | Implementation, diagnosis, tests and focused review | Workhorse tier; medium or high | Sol | Sonnet |
 | Difficult architecture or consequential uncertainty | Strong reasoning tier; high or xhigh | Astra | Opus |
 
+Self-contained text work that needs no repository or tools can go to the optional
+[external specialist](external-specialist.md) instead of a native agent, within its
+data boundary.
+
 Select the least costly adequate option using available capability and price information;
 do not infer exact cost from a family name. Do not spawn merely to reach a nominally
 cheaper model. A short continuation may be cheaper overall with an existing teammate.

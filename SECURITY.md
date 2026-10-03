@@ -82,6 +82,31 @@ hashes; unknown or modified destination contents are not overwritten. These chec
 are integrity checks, not a sandbox against upstream code or a same-user attacker.
 Existing external registrations are retained rather than silently replaced.
 
+## External specialist
+
+The optional runner sends a brief to another provider through the Command Code CLI.
+Measured on Command Code 1.74.1 for Windows with canary files: a direct headless call
+attached the working directory path and listing, the contents of `AGENTS.md`, the
+Git branch, status and last commit, the operating system, the date, the global taste
+profile and the user name inside paths, and it obeyed the instruction file. File
+writes and shell commands were refused without approval; file reads ran.
+
+| Sent by the runner | Not sent |
+| --- | --- |
+| The brief, at most 20 KB, refused when it contains credential-shaped text | Repository files, listings and Git state: it runs in a new empty directory |
+| The CLI's system prompt and tool list | Project instruction files: none exist in that directory |
+| The temporary directory's path, which contains the user name | File contents: one model turn, so a read is never returned to the model |
+| Operating system and date | Environment variables beyond the few the CLI needs to start |
+| The global Command Code taste profile, when present | Skills and saved sessions |
+
+The taste profile cannot be disabled per run with the options this version offers;
+remove or edit it in Command Code if it should not be shared. The brief's content is
+the caller's responsibility: the credential check is a short list of patterns, not
+data-loss prevention. The single-turn limit and the refusal of direct calls depend on
+this CLI's behavior and on literal command recognition; they are not a sandbox.
+Re-measure after a Command Code upgrade that changes headless behavior. Usage and
+billing follow the user's Command Code account.
+
 ## Claude Code
 
 Claude Code loads the same scripts through `plugins/ultra-hook/hooks/claude-hooks.json`,
@@ -104,17 +129,17 @@ Download the versioned ZIP and checksum from this repository's GitHub Releases.
 Compare the checksum. In PowerShell, from the download directory:
 
 ```powershell
-$actual = (Get-FileHash -Algorithm SHA256 ./ultra-hook-0.4.0.zip).Hash.ToLowerInvariant()
-$expected = ((Get-Content ./ultra-hook-0.4.0.sha256 -Raw).Trim() -split '\s+')[0]
+$actual = (Get-FileHash -Algorithm SHA256 ./ultra-hook-0.5.0.zip).Hash.ToLowerInvariant()
+$expected = ((Get-Content ./ultra-hook-0.5.0.sha256 -Raw).Trim() -split '\s+')[0]
 if ($actual -ne $expected) { throw 'Checksum mismatch: do not install.' }
 ```
 
-On Linux use `sha256sum -c ultra-hook-0.4.0.sha256`; on macOS use
-`shasum -a 256 -c ultra-hook-0.4.0.sha256`. A matching checksum alone does not
+On Linux use `sha256sum -c ultra-hook-0.5.0.sha256`; on macOS use
+`shasum -a 256 -c ultra-hook-0.5.0.sha256`. A matching checksum alone does not
 authenticate its publisher. Verify signed provenance with GitHub CLI:
 
 ```sh
-gh attestation verify ultra-hook-0.4.0.zip --repo jonmedev/Ultra_Hook --signer-workflow jonmedev/Ultra_Hook/.github/workflows/release.yml --source-ref refs/tags/v0.4.0 --deny-self-hosted-runners
+gh attestation verify ultra-hook-0.5.0.zip --repo jonmedev/Ultra_Hook --signer-workflow jonmedev/Ultra_Hook/.github/workflows/release.yml --source-ref refs/tags/v0.5.0 --deny-self-hosted-runners
 ```
 
 This checks artifact identity and the expected repository, workflow and tag.

@@ -10,7 +10,7 @@ what differs there.
 
 ## Install Ultra Hook and AgentController together
 
-**[Download the setup ZIP](https://github.com/jonmedev/Ultra_Hook/releases/download/v0.4.0/ultra-hook-0.4.0.zip)**
+**[Download the setup ZIP](https://github.com/jonmedev/Ultra_Hook/releases/download/v0.5.0/ultra-hook-0.5.0.zip)**
 
 1. Extract it into a folder you will keep.
 2. **Windows:** double-click `Install.cmd`. **macOS/Linux:** open Terminal in that
@@ -45,7 +45,7 @@ It needs Codex CLI, Node.js and Git:
 Open **PowerShell on Windows** or **Terminal on macOS/Linux** and run each line:
 
 ```sh
-codex plugin marketplace add jonmedev/Ultra_Hook --ref v0.4.0
+codex plugin marketplace add jonmedev/Ultra_Hook --ref v0.5.0
 codex plugin add ultra-hook@ultra-hook
 ```
 
@@ -112,6 +112,25 @@ nothing to the context.
 attempts per mode for the last 30 days, from local counters that hold no prompt text.
 These are counts of agents, not of tokens or cost.
 
+## External specialist (optional)
+
+When the [Command Code](https://commandcode.ai) CLI is installed and signed in, the
+lead can hand a self-contained text task to a model on another provider. It is a
+text-in, text-out helper with no tools and no memory, it counts against the mode's
+agent cap, and its answer is an unverified draft.
+
+```sh
+node plugins/ultra-hook/hooks/external-specialist.cjs --brief-file brief.txt
+```
+
+The runner sends the brief from a new empty directory with a single model turn and a
+minimal environment, so no repository file, Git state or project instruction file is
+attached. The CLI still adds its own system prompt, that temporary directory's path,
+the operating system, the date and your global Command Code taste profile. A direct
+`commandcode` call from the agent is denied in Codex and needs your approval in
+Claude Code, because it attaches the working directory's listing, Git state and
+instruction files. See [what is sent](SECURITY.md#external-specialist).
+
 ## Claude Code
 
 The same two skills and five hook scripts run in Claude Code from this repository's
@@ -164,7 +183,7 @@ requires assertions on the real target; discovering tools alone is not a UI pass
 
 [Update or uninstall](docs/GETTING_STARTED.md#update-or-remove)
 · [Troubleshooting](docs/GETTING_STARTED.md#if-something-is-missing)
-· [Download setup ZIP](https://github.com/jonmedev/Ultra_Hook/releases/download/v0.4.0/ultra-hook-0.4.0.zip)
+· [Download setup ZIP](https://github.com/jonmedev/Ultra_Hook/releases/download/v0.5.0/ultra-hook-0.5.0.zip)
 · [Advanced ZIP installation and diagnostics](docs/ADVANCED_INSTALL.md)
 
 The ZIP launchers use script-managed installation with receipts and backups.
@@ -181,7 +200,7 @@ This is an independent adaptation, not an official OpenAI, CAS or AgentControlle
 ```sh
 python -B scripts/validate.py
 python -B -m unittest discover -s tests
-node --test plugins/ultra-hook/hooks/tests/team-routing.test.cjs plugins/ultra-hook/hooks/tests/safety-windows.test.cjs plugins/ultra-hook/hooks/tests/security-boundaries.test.cjs plugins/ultra-hook/hooks/tests/claude-runtime.test.cjs plugins/ultra-hook/hooks/tests/modes.test.cjs
+node --test plugins/ultra-hook/hooks/tests/team-routing.test.cjs plugins/ultra-hook/hooks/tests/safety-windows.test.cjs plugins/ultra-hook/hooks/tests/security-boundaries.test.cjs plugins/ultra-hook/hooks/tests/claude-runtime.test.cjs plugins/ultra-hook/hooks/tests/modes.test.cjs plugins/ultra-hook/hooks/tests/external-specialist.test.cjs
 python -B scripts/audit_release.py --git-staged --git-history --allow-github-noreply-identities
 python -B scripts/build_release.py --output ../ultra-hook-release
 ```

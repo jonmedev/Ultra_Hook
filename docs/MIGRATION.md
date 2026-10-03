@@ -64,8 +64,10 @@ The release does not carry forward banners, prompt-optimization ceremonies, fixe
 sizes, mandatory triple reviews, forced model aliases, backend locks or write-count
 limits. Historical helper scripts, templates and local session state are not bundled.
 
-Command Code and external DeepSeek specialist runners are excluded until their context
-isolation and process behavior can be verified portably. A public integration must
+Since 0.5.0 an optional [external specialist runner](../SECURITY.md#external-specialist)
+sends one self-contained brief through Command Code under measured boundaries. The
+earlier Command Code skill and external DeepSeek runners that called the CLI directly
+remain excluded, because a direct call attaches local context on its own. A public integration must
 establish which prompts, local context, settings and metadata can reach an external
 provider, preserve execution boundaries, and report usage honestly. A text-only tool
 filter, timeout or turn limit alone is not proof of isolation or a hard spending cap.
