@@ -112,6 +112,7 @@ def runtime_arguments(cli, cwd, *, check_agentcontroller=False):
                 raise InstallError('AgentController runtime check requires a reviewed simple local command without extra config.')
             allowed = registration
     flags = []
+    configured = set(load_config(cli.home).get('mcp_servers', {}))
     for name in sorted(names):
         # Plugin/virtual servers may be listed as disabled without a base
         # transport. Adding even an enabled=false table synthesizes an invalid
@@ -119,7 +120,13 @@ def runtime_arguments(cli, cwd, *, check_agentcontroller=False):
         if name in already_disabled:
             continue
         enabled = name == SERVER and allowed is not None
-        flags.append(json.dumps(name, ensure_ascii=False) + '={enabled=' + str(enabled).lower() + '}')
+        entry = 'enabled=' + str(enabled).lower()
+        if not enabled and name not in configured:
+            # An enabled plugin-provided server has no profile table to merge into,
+            # and a bare enabled=false is rejected as an invalid transport. This
+            # placeholder is never started: the entry stays disabled.
+            entry += ',command="ultra-hook-doctor-disabled"'
+        flags.append(json.dumps(name, ensure_ascii=False) + '={' + entry + '}')
     # Native dotted-key overrides split dots even inside quotes. A TOML inline
     # table retains arbitrary server names and merges only the enabled fields.
     overrides = ['-c', 'mcp_servers={' + ','.join(flags) + '}'] if flags else []

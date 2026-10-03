@@ -194,11 +194,16 @@ class SecurityTests(unittest.TestCase):
                 if len(inner.calls)>1 and '"bundled-disabled"' in args[-1]:
                     raise install.InstallError('synthetic native invalid transport')
                 return [{'name':'local-server','enabled':len(inner.calls)==1},
+                        {'name':'bundled-enabled','enabled':len(inner.calls)==1},
                         {'name':'bundled-disabled','enabled':False}]
+        config=self.home/'config.toml'
+        config.write_text((config.read_text() if config.exists() else '')+'\n[mcp_servers.local-server]\ncommand = "synthetic"\n')
         cli=SyntheticCatalog()
         args=doctor.runtime_arguments(cli,self.repo)
         self.assertNotIn('bundled-disabled',args[-1])
         self.assertIn('"local-server"={enabled=false}',args[-1])
+        # An enabled server the profile does not define needs a transport to stay valid.
+        self.assertIn('"bundled-enabled"={enabled=false,command="ultra-hook-doctor-disabled"}',args[-1])
         self.assertEqual(len(cli.calls),2)
 
 
